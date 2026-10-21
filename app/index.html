@@ -18,7 +18,24 @@
     <div class="tab" data-view="browse" data-type="anime">动漫</div>
     <div class="tab" data-view="browse" data-type="show">综艺</div>
     <div class="spacer"></div>
+    <div class="tab user" data-view="user" id="tab-user">登录</div>
     <div class="clock" id="clock">--:--</div>
+  </div>
+
+  <!-- Login / account picker -->
+  <div id="login" class="view">
+    <div id="login-box">
+      <div class="logo">MoonTV</div>
+      <div id="login-title">选择用户</div>
+      <div id="login-sub"></div>
+      <div id="login-pick"><div id="login-users" class="users"></div></div>
+      <div id="login-add" class="hidden">
+        <div class="field empty" id="f-user-wrap"><span class="label">用户名</span><span class="val" id="f-user"></span><span class="ph">按确认键输入</span></div>
+        <div class="field empty" id="f-pass-wrap"><span class="label">密码</span><span class="val" id="f-pass"></span><span class="ph">按确认键输入</span></div>
+        <div class="btn" id="f-submit">登录并记住</div>
+        <div id="login-err"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Home: five horizontal rows -->
@@ -111,6 +128,7 @@
   <script src="js/browse.js"></script>
   <script src="js/pinyin-data.js"></script>
   <script src="js/ime.js"></script>
+  <script src="js/accounts.js"></script>
   <script src="js/search.js"></script>
   <script src="js/detail.js"></script>
   <script src="js/player.js"></script>

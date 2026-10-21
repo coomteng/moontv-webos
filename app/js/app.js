@@ -55,9 +55,22 @@ var App = (function () {
       onEnter: function (el) {
         var v = el.getAttribute('data-view');
         var t = el.getAttribute('data-type');
+        if (v === 'user') return userMenu();
         goRoot(v, t ? { type: t } : {});
       }
     };
+  }
+
+  /* OK on the user tab: log out → account picker (accounts stay remembered). */
+  function userMenu() {
+    if (!currentUser) { stack = []; activate({ name: 'login', params: {} }, false); return; }
+    UI.toast('已登出 ' + currentUser);
+    Accounts.logout().then(function () {
+      setUser('');
+      Records.set([]);
+      stack = [];
+      activate({ name: 'login', params: {} }, false);
+    });
   }
 
   function markCurrentTab(name, params) {
@@ -74,8 +87,17 @@ var App = (function () {
   function showDom(name) {
     var all = document.querySelectorAll('.view');
     for (var i = 0; i < all.length; i++) UI.toggleClass(all[i], 'active', all[i].id === name);
-    UI.toggleClass(UI.$('topbar'), 'hidden', name === 'player');
+    UI.toggleClass(UI.$('topbar'), 'hidden', name === 'player' || name === 'login');
   }
+
+  /* current user shown in the top bar; '' = bridge default account */
+  var currentUser = '';
+  function setUser(u) {
+    currentUser = u || '';
+    var el = UI.$('tab-user');
+    if (el) el.textContent = currentUser ? '\u25CF ' + currentUser : '登录';
+  }
+  function getUser() { return currentUser; }
 
   function activate(entry, isBack) {
     var prev = activeName;
@@ -114,9 +136,10 @@ var App = (function () {
   function currentName() { return activeName; }
 
   /* Views call this whenever their zones change. Tabs are prepended except in the player. */
-  function setZones(zones, startZone) {
-    var all = activeName === 'player' ? zones : [tabsZone].concat(zones);
-    var start = startZone === undefined ? (activeName === 'player' ? 0 : 1) : startZone + (activeName === 'player' ? 0 : 1);
+  function setZones(zones, startZone, noTabs) {
+    var bare = noTabs || activeName === 'player' || activeName === 'login';
+    var all = bare ? zones : [tabsZone].concat(zones);
+    var start = startZone === undefined ? (bare ? 0 : 1) : startZone + (bare ? 0 : 1);
     if (start >= all.length) start = all.length - 1;
     Nav.setContext({ zones: all, zone: start });
   }
@@ -166,13 +189,32 @@ var App = (function () {
     document.addEventListener('keydown', onKeyDown, false);
     /* Reduce scrolling/jumping from the TV browser default handlers. */
     window.addEventListener('scroll', function () { window.scrollTo(0, 0); }, false);
-    Records.load();
-    goRoot('home', {});
+    API.setReauth(Accounts.reauth);
+    /* Boot: auto-login as the last user; otherwise show the account picker. */
+    UI.loading(true);
+    Accounts.autoLogin().then(function (u) {
+      UI.loading(false);
+      if (u) {
+        setUser(u);
+        Records.load();
+        goRoot('home', {});
+      } else {
+        setUser('');
+        stack = [];
+        activate({ name: 'login', params: {} }, false);
+      }
+    }, function () {
+      /* bridge unreachable: still show the picker so the user sees an error there */
+      UI.loading(false);
+      setUser('');
+      stack = [];
+      activate({ name: 'login', params: {} }, false);
+    });
   }
 
   return {
     register: register, go: go, goRoot: goRoot, back: back, setZones: setZones, focusTabs: focusTabs,
-    currentName: currentName, zoneName: zoneName, errorToast: errorToast, Records: Records, init: init,
+    currentName: currentName, zoneName: zoneName, errorToast: errorToast, setUser: setUser, getUser: getUser, Records: Records, init: init,
     stackNames: function () { var n = []; for (var i = 0; i < stack.length; i++) n.push(stack[i].name); return n; }
   };
 })();

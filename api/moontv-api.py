@@ -14,6 +14,7 @@ Endpoints (all GET unless noted):
   /poster?url=                 image, cached 7 days
   /record  (GET)               all play records
   /record  (POST {key,record}) save a play record
+  /login (POST {username,password}) -> {session}; send it back as X-Session header. /logout, /me
   /probe   (POST {items:[{source,source_name,url}], fresh?})  HLS speed/quality probe, cached 15 min;
                                fresh:true re-measures (the TV's 重新测速 button)
   /health
@@ -56,20 +57,24 @@ def log(msg):
 
 # --------------------------------------------------------------------------- upstream
 class Upstream:
-    def __init__(self):
+    """One MoonTV login (cookie) for one set of credentials."""
+
+    def __init__(self, username, password):
+        self.username = username
+        self._password = password
         self._lock = threading.Lock()
         self._cookie = None
         self._at = 0.0
 
     def _login(self):
-        body = json.dumps({"username": USERNAME, "password": PASSWORD}).encode()
+        body = json.dumps({"username": self.username, "password": self._password}).encode()
         req = urllib.request.Request(UPSTREAM + "/api/login", data=body, method="POST",
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=15) as r:
             for c in r.headers.get_all("Set-Cookie") or []:
                 kv = c.split(";", 1)[0].strip()
                 if kv.startswith("auth="):
-                    log("login ok")
+                    log("login ok (%s)" % self.username)
                     return kv
         raise RuntimeError("login response had no auth cookie")
 
@@ -105,7 +110,49 @@ class Upstream:
         raise RuntimeError("unreachable")
 
 
-UP = Upstream()
+UP = Upstream(USERNAME, PASSWORD)   # default account: shared/public data + TVs that never logged in
+
+
+class AuthError(Exception):
+    pass
+
+
+class Sessions:
+    """Opaque session tokens for TVs that logged in as another MoonTV user.
+
+    Tokens live in memory (a bridge restart logs everyone out; the app then falls back to the
+    default account and shows the login page again). Credentials are kept only to re-login
+    when MoonTV's cookie expires; they never leave the process."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._by_token = {}
+
+    def login(self, username, password):
+        up = Upstream(username, password)
+        try:
+            up.cookie(force=True)           # validates the credentials against MoonTV now
+        except urllib.error.HTTPError as e:
+            raise AuthError("HTTP %d" % e.code)
+        except Exception as e:  # noqa: BLE001
+            raise AuthError(str(e) or type(e).__name__)
+        token = hashlib.sha256(os.urandom(32)).hexdigest()
+        with self._lock:
+            self._by_token[token] = up
+        return token
+
+    def get(self, token):
+        if not token:
+            return UP
+        with self._lock:
+            return self._by_token.get(token)
+
+    def logout(self, token):
+        with self._lock:
+            self._by_token.pop(token, None)
+
+
+SESSIONS = Sessions()
 
 # --------------------------------------------------------------------------- caches
 _mem = {}
@@ -180,8 +227,8 @@ def douban_list(kind, tag, region, start, size):
     return mem_cached("douban:%s:%s:%s:%d:%d" % (kind, tag, region, start, size), LIST_TTL, fetch)
 
 
-def continue_watching(limit=20):
-    recs = UP.call("/api/playrecords") or {}
+def continue_watching(up, limit=20):
+    recs = up.call("/api/playrecords") or {}
     items = []
     for key, r in recs.items():
         if "+" not in key:
@@ -259,7 +306,7 @@ def build_titles():
             weight[v] = max(weight.get(v, 0), w)
 
     try:
-        for r in continue_watching(limit=200):
+        for r in continue_watching(UP, limit=200):
             add(r.get("title"), 3)
     except Exception as e:  # noqa: BLE001
         log("titles: records failed %r" % (e,))
@@ -498,7 +545,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Session")
 
     def _send(self, status, data, ctype="application/json; charset=utf-8", cache=None):
         if "gzip" in (self.headers.get("Accept-Encoding") or "") and len(data) > 1024 \
@@ -532,6 +579,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+    def _session(self):
+        """Upstream for this request: X-Session header (or ?session=) -> logged-in user, else default."""
+        token = self.headers.get("X-Session") or urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("session", [None])[0]
+        up = SESSIONS.get(token)
+        if up is None:
+            raise AuthError("session expired")
+        return up
+
     def do_GET(self):
         u = urllib.parse.urlsplit(self.path)
         p = u.path.rstrip("/") or "/"
@@ -564,9 +619,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return None
             if p == "/health":
                 return self._json({"ok": True, "upstream": UPSTREAM, "app": bool(APP_DIR), "sim": bool(SIM_FILE)})
+            if p == "/me":
+                up = self._session()
+                return self._json({"username": up.username, "default": up is UP})
             if p == "/home":
+                up = self._session()
                 return self._json({
-                    "continue": continue_watching(),
+                    "user": up.username,
+                    "continue": continue_watching(up),
                     "movie": douban_list("movie", "热门", "全部", 0, 20),
                     "tv": douban_list("tv", "全部", None, 0, 20),
                     "anime": douban_list("anime", "动画", None, 0, 20),
@@ -592,7 +652,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._error(400, "source and id required")
                 return self._json(UP.call("/api/detail?source=%s&id=%s" % (q(src), q(vid))))
             if p == "/record":
-                return self._json(continue_watching(limit=200))
+                return self._json(continue_watching(self._session(), limit=200))
             if p == "/probe":
                 url = g("url")
                 if not url:
@@ -605,6 +665,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data, ctype = poster_cached(url)
                 return self._send(200, data, ctype, cache=POSTER_TTL)
             return self._error(404, "not found")
+        except AuthError as e:
+            return self._error(401, str(e))
         except urllib.error.HTTPError as e:
             log("upstream HTTP %s for %s" % (e.code, self.path))
             return self._error(502, "upstream HTTP %s" % e.code)
@@ -620,6 +682,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ValueError:
             return self._error(400, "invalid json")
         try:
+            if p == "/login":
+                user, pw = (body.get("username") or "").strip(), body.get("password") or ""
+                if not user or not pw:
+                    return self._error(400, "username and password required")
+                try:
+                    token = SESSIONS.login(user, pw)
+                except AuthError as e:
+                    log("login failed for %s: %s" % (user, e))
+                    return self._error(401, "login failed")
+                return self._json({"ok": True, "session": token, "username": user})
+            if p == "/logout":
+                SESSIONS.logout(self.headers.get("X-Session") or body.get("session"))
+                return self._json({"ok": True})
             if p == "/probe":
                 items = body.get("items") if isinstance(body, dict) else body
                 if not isinstance(items, list) or not items:
@@ -631,9 +706,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not key or not isinstance(rec, dict):
                     return self._error(400, "key and record required")
                 rec.setdefault("save_time", int(time.time() * 1000))
-                UP.call("/api/playrecords", method="POST", body={"key": key, "record": rec})
+                self._session().call("/api/playrecords", method="POST", body={"key": key, "record": rec})
                 return self._json({"ok": True})
             return self._error(404, "not found")
+        except AuthError as e:
+            return self._error(401, str(e))
         except urllib.error.HTTPError as e:
             return self._error(502, "upstream HTTP %s" % e.code)
         except Exception as e:  # noqa: BLE001

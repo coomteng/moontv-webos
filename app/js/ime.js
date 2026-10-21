@@ -327,6 +327,7 @@ var IME = (function () {
     if (!root) build();
     text = opts && opts.value ? String(opts.value) : '';
     buf = '';
+    if (opts && opts.english !== undefined) chinese = !opts.english;
     recompute();
     focusRow = 1; focusCol = 0;           /* start on 'a' */
     open = true;

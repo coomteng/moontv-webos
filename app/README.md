@@ -29,6 +29,12 @@ Bump `"version"` in `appinfo.json` when changing files (the ipk filename follows
 2. **Built-in table (`js/pinyin-data.js`, ~530 KB)** — 3500 chars + 20k words from jieba frequencies plus
    `tools/titles.txt` boosted to the top. Rebuild occasionally: `pip install pypinyin jieba && python3 tools/gen_pinyin.py`.
 
+## Accounts
+The bridge logs in with its default account (`MOONTV_USER`). A TV can additionally log in as any MoonTV user:
+`POST /login {username,password}` returns a session token, sent as `X-Session` on every request; per-user data
+(play records, 继续观看) then comes from that account. Credentials are remembered in the TV's `localStorage`
+(obfuscated, not encrypted) so they are entered once; on bridge restart the app re-logs in silently.
+
 ## Remote keys
 ←→↑↓ move focus · OK select / play-pause · Back (461) go back / exit · in player ←→ seek ±10 s, ↑↓ episode strip ·
 yellow = re-probe sources (detail) / 中-EN (keyboard) · keyboard: red delete, green first candidate, blue search, digits pick.

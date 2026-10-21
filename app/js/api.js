@@ -10,6 +10,12 @@ var API = (function () {
     : 'http://BRIDGE_HOST:8788';
   var DEFAULT_TIMEOUT = 20000;
 
+  /* Session token issued by POST /login; sent as X-Session on every request.
+   * Empty = use the bridge's default account. reauth() is installed by Accounts and is called
+   * once when the bridge answers 401 (bridge restarted / token expired) to re-login silently. */
+  var session = '';
+  var reauth = null;
+
   function qs(params) {
     var parts = [];
     for (var k in params) {
@@ -22,7 +28,7 @@ var API = (function () {
   }
 
   /* request(method, path, body, timeoutMs) -> Promise<json>. Errors are plain Error objects with .url set. */
-  function request(method, path, body, timeoutMs) {
+  function request(method, path, body, timeoutMs, isRetry) {
     var url = BASE + path;
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
@@ -40,6 +46,7 @@ var API = (function () {
         return fail('open failed: ' + e.message);
       }
       xhr.timeout = timeoutMs || DEFAULT_TIMEOUT;
+      if (session) { try { xhr.setRequestHeader('X-Session', session); } catch (e3) { /* ignore */ } }
       xhr.onreadystatechange = function () {
         if (xhr.readyState !== 4 || done) return;
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -51,8 +58,19 @@ var API = (function () {
           }
           done = true;
           resolve(data);
+        } else if (xhr.status === 401 && session && !isRetry && reauth && path !== '/login') {
+          /* token no longer valid on the bridge: re-login with the stored credentials, retry once */
+          done = true;
+          reauth().then(function () {
+            request(method, path, body, timeoutMs, true).then(resolve, reject);
+          }, function () {
+            var err = new Error('HTTP 401 ' + path); err.url = url; err.status = 401; reject(err);
+          });
         } else {
-          fail('HTTP ' + xhr.status + ' ' + path);
+          var e2 = new Error('HTTP ' + xhr.status + ' ' + path); e2.url = url; e2.status = xhr.status;
+          if (done) return;
+          done = true;
+          reject(e2);
         }
       };
       xhr.onerror = function () { fail('network error ' + path); };
@@ -79,6 +97,13 @@ var API = (function () {
     home: function () { return get('/home'); },
     filters: function () { return get('/filters'); },
     titles: function () { return get('/titles', null, 120000); },
+    /* --- accounts --- */
+    login: function (username, password) { return request('POST', '/login', { username: username, password: password }, 20000, true); },
+    logout: function () { var t = session; session = ''; return t ? request('POST', '/logout', { session: t }, 10000, true).then(null, function () {}) : Promise.resolve(); },
+    me: function () { return get('/me'); },
+    setSession: function (t) { session = t || ''; },
+    hasSession: function () { return !!session; },
+    setReauth: function (fn) { reauth = fn; },
     list: function (type, tag, region, start, size) {
       return get('/list', { type: type, tag: tag, region: region, start: start || 0, size: size || 24 });
     },
