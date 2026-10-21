@@ -30,10 +30,11 @@ TV app (ES5 + flexbox, com.ting.moontv) ──JSON──▶ moontv-api (Python, 
 | `test/` | Headless Chrome walk-through (`walk.js`) used to verify the app at 1920×1080 without a TV. |
 
 ## Quick start
-1. **Bridge** — copy `api/` next to your MoonTV `docker-compose.yml` as `moontv-api/`, merge `api/compose.snippet.yml`
-   into the stack (same network as `moontv-core`), set `MOONTV_USER` / `MOONTV_PASS` (a MoonTV login), expose 8788.
-   Standalone: `docker build -t moontv-api api && docker run -e MOONTV_UPSTREAM=http://<moontv>:3000 -e MOONTV_USER=… -e MOONTV_PASS=… -p 8788:8788 moontv-api`.
-   Update after edits: `docker build -t moontv-api:local moontv-api && docker restart moontv-api`.
+1. **Bridge** — merge `api/compose.snippet.yml` into your MoonTV compose stack (same network as `moontv-core`). It
+   builds the image straight from this GitHub repo, so no local checkout is needed; set `MOONTV_USER` / `MOONTV_PASS`
+   (a MoonTV login), expose 8788. Standalone:
+   `docker build -t moontv-api -f api/Dockerfile https://github.com/coomteng/moontv-webos.git#main && docker run -e MOONTV_UPSTREAM=http://<moontv>:3000 -e MOONTV_USER=… -e MOONTV_PASS=… -p 8788:8788 moontv-api`.
+   Update: rebuild the stack (Portainer *Update the stack* with re-build) after a new commit lands on `main`.
 2. **App** — set `BASE` in `app/js/api.js` to `http://<bridge-host>:8788`, then
    `ares-package app -o dist && ares-install --device <tv> dist/*.ipk` (LG Developer Mode required). Details in `app/README.md`.
 

@@ -1,8 +1,11 @@
 # Add this service to the MoonTV stack (Portainer stack "moontv", docker-compose.yml)
   moontv-api:
+    # Build straight from GitHub (no local checkout needed). To pin a release use
+    # ...moontv-webos.git#v2.5.0 ; for a local checkout use context: ./moontv-webos
     build:
-      context: ./moontv-webos     # the repo checkout (needs api/, app/, sim/)
+      context: https://github.com/coomteng/moontv-webos.git#main
       dockerfile: api/Dockerfile
+    pull_policy: build           # image exists only locally; never try to pull it from a registry
     image: moontv-api:local
     container_name: moontv-api
     restart: unless-stopped
