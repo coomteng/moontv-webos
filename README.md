@@ -5,31 +5,24 @@ A remote-control-friendly front end for [MoonTV / LunaTV](https://github.com/Moo
 
 ![Home](docs/screenshots/01-home.jpg)
 
-| Browse with filters | Built-in pinyin keyboard |
+| Category browsing with filters | Built-in pinyin keyboard |
 |---|---|
 | ![Browse](docs/screenshots/02-browse.jpg) | ![Pinyin keyboard](docs/screenshots/03-pinyin-keyboard.jpg) |
-
-| Search results grouped by title | Per-source speed / resolution probe |
-|---|---|
-| ![Search](docs/screenshots/04-search.jpg) | ![Detail with probe](docs/screenshots/05-detail-probe.jpg) |
 
 ## Features
 - **Runs on Chrome 53** — plain ES5 + flexbox, no framework, no build step; an acorn `ecmaVersion: 5` gate keeps it that way.
 - **Remote-first UI** — deterministic focus navigation, big type, dark theme; Back key (461) handled in JS.
-- **Source probing** — every source is measured (latency, download speed, resolution via master playlist or H.264 SPS); the best one is auto-selected, dead ones are greyed out.
-- **Pinyin keyboard** — EU TVs ship no Chinese IME; the app includes one (full/abbreviated pinyin, prefix completion, live title index from your MoonTV so new shows are typeable without reinstalling).
-- **Native HLS playback** with resume, auto-next, and play records synced with the MoonTV web UI.
-- **Browser simulator** — open `http://<bridge>:8788/` on any computer: a scaled 1920×1080 "TV" running the exact same app, plus an on-screen remote (keyboard mapped). Playback via hls.js there; on the TV it stays native.
+- **Pinyin keyboard** — EU TVs ship no Chinese IME; the app includes one (full/abbreviated pinyin, prefix completion, live title index so new entries are typeable without reinstalling).
+- **Browser simulator** — open `http://<bridge>:8788/` on any computer: a scaled 1920×1080 "TV" running the exact same app, plus an on-screen remote (keyboard mapped).
 
 ```
 TV app (ES5 + flexbox, com.ting.moontv) ──JSON──▶ moontv-api (Python, Docker sidecar) ──▶ MoonTV :3000
-                                     └── <video src=m3u8> plays HLS natively
 ```
 
 | Dir | What |
 |---|---|
-| `app/` | The webOS app: home rows, category browse with filters, search with a **built-in pinyin keyboard**, detail with **per-source speed/resolution probing**, HLS player with resume. See `app/README.md`. |
-| `api/` | `moontv-api.py`: stdlib-only bridge that logs into MoonTV, exposes CORS JSON (`/home /list /search /detail /record /poster /probe /titles`), caches posters, probes stream quality. Dockerfile + compose snippet included. |
+| `app/` | The webOS app: home rows, category browse with filters, search with a **built-in pinyin keyboard**, detail view, player. See `app/README.md`. |
+| `api/` | `moontv-api.py`: stdlib-only bridge that logs into MoonTV and exposes its API as CORS JSON for the TV (plus poster caching and a live title index for the keyboard). Dockerfile + compose snippet included. |
 | `sim/` | Browser TV simulator page served by the bridge at `/sim` (`/` redirects there); the app itself is served at `/tv/`. |
 | `tools/` | `gen_pinyin.py` builds `app/js/pinyin-data.js` from jieba + pypinyin. |
 | `test/` | Headless Chrome walk-through (`walk.js`) used to verify the app at 1920×1080 without a TV. |
@@ -49,9 +42,8 @@ Why a bridge: the app is loaded from `file://`, so it cannot carry MoonTV's `Sam
 logs in on its behalf. Only the Python stdlib is used (plus optional `pypinyin` for the live title index).
 
 ## Remote keys
-←→↑↓ move · OK select / play-pause · Back go back (in player: exit; in keyboard: delete/close) · in player ←→ seek ±10 s ·
-yellow = re-probe sources (detail) / 中-EN (keyboard) · red/green/blue in keyboard = delete / first candidate / search ·
-digits pick candidates.
+←→↑↓ move · OK select · Back go back (in keyboard: delete/close) · keyboard: yellow 中/EN, red delete,
+green first candidate, blue search, digits pick candidates.
 
 ## License
 MIT
