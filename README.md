@@ -2,59 +2,114 @@
 
 [English](README.md) · [中文](README.zh-CN.md)
 
-A remote-control-friendly front end for [MoonTV / LunaTV](https://github.com/MoonTechLab/LunaTV) that runs on
-**old LG webOS TVs (webOS 4.x, Chrome 53 WebView)** where the stock MoonTV web UI cannot run (it needs ES2018+).
+Watch your [MoonTV / LunaTV](https://github.com/MoonTechLab/LunaTV) library on an older LG TV, with the remote.
+
+## What this is
+
+MoonTV ships a web UI that works fine on phones and laptops. On LG TVs from around 2018 it does not load at all: the browser engine inside those TVs is Chrome 53, which cannot run the JavaScript MoonTV is built with. You get a page of text, no posters, nothing to click.
+
+This project is a separate TV interface for the same MoonTV. It installs as its own app on the TV and only does display and remote-control handling. The data still comes from your MoonTV, through a small relay service (called the "bridge" below) that runs in Docker next to MoonTV.
 
 ![Home](docs/screenshots/01-home.jpg)
 
-| Category browsing with filters | Built-in pinyin keyboard |
+| Browse by category, with filters | Built-in pinyin keyboard |
 |---|---|
 | ![Browse](docs/screenshots/02-browse.jpg) | ![Pinyin keyboard](docs/screenshots/03-pinyin-keyboard.jpg) |
 
-**Phone as keyboard** — scan the QR code shown next to the on-screen keyboard, type on your phone, done:
+## What it does
+
+**Works with the remote.** Arrow keys move, OK selects, Back goes up a level. Text is large enough to read from the couch.
+
+**Chinese input without hunting for letters.** European LG TVs have no Chinese input method, so the app brings its own pinyin keyboard. It takes full pinyin and initials (`lxrg` finds 兰香如故), and it pulls recent titles from your MoonTV for suggestions.
+
+**Type on your phone instead.** A QR code sits next to the keyboard. Scan it with a phone on the same Wi-Fi and a plain input page opens; type there, tap once, and the text lands on the TV. Nothing to install on the phone.
 
 | TV: keyboard with QR code | Phone: input page |
 |---|---|
 | ![TV keyboard with QR](docs/screenshots/04-phone-qr.jpg) | <img src="docs/screenshots/05-phone-input.jpg" width="260" alt="Phone input page"> |
 
-## Features
-- **Runs on Chrome 53** — plain ES5 + flexbox, no framework, no build step; an acorn `ecmaVersion: 5` gate keeps it that way.
-- **Remote-first UI** — deterministic focus navigation, big type, dark theme; Back key (461) handled in JS.
-- **Pinyin keyboard** — EU TVs ship no Chinese IME; the app includes one (full/abbreviated pinyin, prefix completion, live title index so new entries are typeable without reinstalling).
-- **Multiple users** — accounts are remembered on the TV after the first login; the last user is logged in automatically at start; log out from the top bar to get a Netflix-style account picker (one OK press per user, red key removes one).
-- **Phone as keyboard** — the on-screen keyboard shows a QR code; scan it with any phone on the same Wi-Fi, type there, and the text lands on the TV (fill or submit). No app to install; the page is served by the bridge.
-- **Browser simulator** — open `http://<bridge>:8788/` on any computer: a scaled 1920×1080 "TV" running the exact same app, plus an on-screen remote (keyboard mapped).
+**Several people, separate accounts.** Each person logs in with their MoonTV account once and the TV remembers it. Next time the TV starts straight into whoever used it last. To switch, select the user name in the top bar to log out; a picker with one tile per account appears, and selecting a tile logs in without a password.
 
-```
-TV app (ES5 + flexbox, com.ting.moontv) ──JSON──▶ moontv-api (Python, Docker sidecar) ──▶ MoonTV :3000
+**Try it without a TV.** Open `http://<bridge>:8788/` in a desktop browser and you get a scaled-down "TV" running the exact same app, with a clickable remote drawn next to it. Handy when changing things.
+
+## What you need
+
+- An LG webOS TV. Developed and tested on webOS 4.4 (a 2018 OLED B8); newer models should work too.
+- A running MoonTV deployed with Docker.
+- Developer Mode on the TV, which is how LG lets you install your own apps. Install LG's free "Developer Mode" app from the TV's store and sign in with an LG developer account. Sessions expire (1000 hours on current firmware); press Extend in that app before they do.
+- A computer with Node.js for packaging and installing.
+
+## Setup
+
+### Step 1: add the bridge next to MoonTV
+
+The bridge is a small Python program packaged as a Docker image. It belongs in the same compose file as MoonTV. Open your MoonTV `docker-compose.yml`, copy the service from [api/compose.snippet.yml](api/compose.snippet.yml) into it, and change three things:
+
+- `MOONTV_USER` and `MOONTV_PASS`: a MoonTV account the bridge logs in with.
+- The network name must match the one `moontv-core` uses.
+- The port is 8788 by default; leave it unless it clashes with something.
+
+The image builds straight from this repository's GitHub URL, so nothing needs to be checked out on the server. Run `docker compose up -d --build`, or update the stack in Portainer.
+
+To check it worked, open `http://<server-ip>:8788/` in a browser. If the simulated TV shows up, the bridge is running.
+
+If you would rather not touch the MoonTV compose file, the bridge also runs on its own:
+
+```bash
+docker build -t moontv-api -f api/Dockerfile https://github.com/coomteng/moontv-webos.git#main
+docker run -d -p 8788:8788 \
+  -e MOONTV_UPSTREAM=http://<moontv-host>:3000 \
+  -e MOONTV_USER=<user> -e MOONTV_PASS=<password> \
+  moontv-api
 ```
 
-| Dir | What |
+### Step 2: install the app on the TV
+
+On your computer:
+
+```bash
+npm install -g @webos-tools/cli
+git clone https://github.com/coomteng/moontv-webos.git
+cd moontv-webos
+
+# tell the app where the bridge is (this file is git-ignored)
+echo 'BRIDGE_BASE=http://<server-ip>:8788' > local.env
+
+# register the TV: enter its IP, port 9922, user "prisoner";
+# then turn on Key Server in the TV's Developer Mode app and type the 6-character passphrase it shows
+ares-setup-device
+ares-novacom --device <tv-name> --getkey
+
+# package and install
+tools/build_ipk.sh
+ares-install --device <tv-name> dist/*.ipk
+```
+
+A MoonTV icon appears on the TV's home screen. The first launch asks for a MoonTV login; after that it remembers.
+
+Remote-key reference, updating, and pre-provisioned accounts are described in [app/README.md](app/README.md).
+
+## Questions
+
+**Why a bridge at all? Can't the TV talk to MoonTV directly?**
+The TV app starts from a local file, and browsers refuse to send MoonTV's login cookie from that origin. MoonTV accepts no other form of authentication, so the bridge logs in on the TV's behalf and passes the data through. It uses only the Python standard library.
+
+**Is it safe?**
+The bridge has no access control and is meant for a home network only. Do not expose port 8788 to the internet.
+
+**If it works in the simulator, will it work on the TV?**
+Not necessarily. A desktop browser is years ahead of the TV. The repository includes a syntax check that keeps the code within what Chrome 53 understands, but a final test on the real TV is still needed.
+
+## Repository layout
+
+| Directory | Contents |
 |---|---|
-| `app/` | The webOS app: home rows, category browse with filters, search with a **built-in pinyin keyboard**, detail view, player. See `app/README.md`. |
-| `api/` | `moontv-api.py`: stdlib-only bridge that logs into MoonTV and exposes its API as CORS JSON for the TV (plus poster caching and a live title index for the keyboard). Dockerfile + compose snippet included. |
-| `sim/` | Browser TV simulator page served by the bridge at `/sim` (`/` redirects there); the app itself is served at `/tv/`. |
-| `tools/` | `gen_pinyin.py` builds `app/js/pinyin-data.js` from jieba + pypinyin. |
-| `test/` | Headless Chrome walk-through (`walk.js`) used to verify the app at 1920×1080 without a TV. |
-
-## Quick start
-1. **Bridge** — merge `api/compose.snippet.yml` into your MoonTV compose stack (same network as `moontv-core`). It
-   builds the image straight from this GitHub repo, so no local checkout is needed; set `MOONTV_USER` / `MOONTV_PASS`
-   (a MoonTV login), expose 8788. Standalone:
-   `docker build -t moontv-api -f api/Dockerfile https://github.com/coomteng/moontv-webos.git#main && docker run -e MOONTV_UPSTREAM=http://<moontv>:3000 -e MOONTV_USER=… -e MOONTV_PASS=… -p 8788:8788 moontv-api`.
-   Update: rebuild the stack (Portainer *Update the stack* with re-build) after a new commit lands on `main`.
-2. **App** — set `BASE` in `app/js/api.js` to `http://<bridge-host>:8788`, then
-   `ares-package app -o dist && ares-install --device <tv> dist/*.ipk` (LG Developer Mode required). Details in `app/README.md`.
-
-Testing without the TV: open `http://<bridge-host>:8788/` — the simulator loads the app from the same origin, so no
-`BASE` edit is needed. On the TV the app is loaded from `file://` and uses the `BASE` constant instead.
-
-Why a bridge: the app is loaded from `file://`, so it cannot carry MoonTV's `SameSite=lax` auth cookie; the bridge
-logs in on its behalf. Only the Python stdlib is used (plus optional `pypinyin` for the live title index).
-
-## Remote keys
-←→↑↓ move · OK select · Back go back (in keyboard: delete/close) · keyboard: yellow 中/EN, red delete,
-green first candidate, blue search, digits pick candidates.
+| `app/` | The TV app. Plain HTML, CSS and JavaScript, no build step. |
+| `api/` | The bridge, `moontv-api.py`, with its Dockerfile and compose snippet. |
+| `sim/` | The simulated-TV page shown in a desktop browser. |
+| `tools/` | `build_ipk.sh` for packaging, `gen_pinyin.py` for the pinyin table. |
+| `test/` | Headless walk-through script that runs without a TV. |
 
 ## License
+
 MIT
