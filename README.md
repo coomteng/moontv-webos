@@ -14,6 +14,7 @@ A remote-control-friendly front end for [MoonTV / LunaTV](https://github.com/Moo
 - **Remote-first UI** — deterministic focus navigation, big type, dark theme; Back key (461) handled in JS.
 - **Pinyin keyboard** — EU TVs ship no Chinese IME; the app includes one (full/abbreviated pinyin, prefix completion, live title index so new entries are typeable without reinstalling).
 - **Multiple users** — accounts are remembered on the TV after the first login; the last user is logged in automatically at start; log out from the top bar to get a Netflix-style account picker (one OK press per user, red key removes one).
+- **Phone as keyboard** — the on-screen keyboard shows a QR code; scan it with any phone on the same Wi-Fi, type there, and the text lands on the TV (fill or submit). No app to install; the page is served by the bridge.
 - **Browser simulator** — open `http://<bridge>:8788/` on any computer: a scaled 1920×1080 "TV" running the exact same app, plus an on-screen remote (keyboard mapped).
 
 ```

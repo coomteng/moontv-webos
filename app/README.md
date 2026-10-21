@@ -37,6 +37,12 @@ The bridge logs in with its default account (`MOONTV_USER`). A TV can additional
 To pre-provision accounts on every TV's first start, set `MOONTV_SEED_ACCOUNTS="user:pass,user2:pass2"` on the bridge
 (served at `/seed-accounts` to the LAN; the TV imports them once and logs in as the first).
 
+## Phone as keyboard
+When the on-screen keyboard opens, the app registers a channel on the bridge (`POST /remote/new`, id persisted in
+`localStorage` so a bookmarked phone page keeps working) and shows a QR code for `http://<bridge>:8788/r/<id>`.
+The phone page POSTs text to `/remote/<id>/send` (`action: input|submit`); the TV long-polls `/remote/<id>/poll`.
+Channels are in-memory, LAN-only, ids are random; needs `qrcode` on the bridge (in the Dockerfile).
+
 ## Remote keys
 ←→↑↓ move focus · OK select / play-pause · Back (461) go back / exit · in player ←→ seek ±10 s, ↑↓ episode strip ·
 yellow = re-probe sources (detail) / 中-EN (keyboard) · keyboard: red delete, green first candidate, blue search, digits pick.

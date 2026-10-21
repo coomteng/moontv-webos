@@ -16,6 +16,7 @@ Endpoints (all GET unless noted):
   /record  (POST {key,record}) save a play record
   /login (POST {username,password}) -> {session}; send it back as X-Session header. /logout, /me
   /seed-accounts               accounts from MOONTV_SEED_ACCOUNTS, imported by a TV on first start
+  /remote/new (POST), /remote/<id>/{qr.svg,poll,state,send}, /r/<id>   phone-as-keyboard for the TV
   /probe   (POST {items:[{source,source_name,url}], fresh?})  HLS speed/quality probe, cached 15 min;
                                fresh:true re-measures (the TV's 重新测速 button)
   /health
@@ -23,6 +24,7 @@ Endpoints (all GET unless noted):
 Python 3 stdlib only.
 """
 import concurrent.futures
+import random
 import gzip
 import hashlib
 import http.server
@@ -282,6 +284,12 @@ try:
 except ImportError:  # pragma: no cover
     lazy_pinyin = None
 
+try:
+    import qrcode
+    import qrcode.image.svg
+except ImportError:  # pragma: no cover
+    qrcode = None
+
 TITLES_TTL = 30 * 60
 _HAN_RE = re.compile(r"[\u4e00-\u9fff]")
 
@@ -342,6 +350,96 @@ def build_titles():
     def finish(d):
         return {k: [t for _, t in sorted(v, key=lambda x: -x[0])][:6] for k, v in d.items()}
     return {"full": finish(full), "initials": finish(initials), "count": len(weight)}
+
+
+# --------------------------------------------------------------------------- remote input (phone -> TV)
+# The TV's on-screen keyboard registers a channel and shows a QR code pointing at /r/<id>.
+# The phone opens that page, types, and POSTs to /remote/<id>/send; the TV long-polls
+# /remote/<id>/poll. Everything is in memory and LAN-only.
+REMOTE_TTL = 24 * 3600
+_ID_RE = re.compile(r"^[A-Za-z0-9]{4,16}$")
+
+
+class Remote:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._ch = {}
+
+    def _new_id(self):
+        alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+        return "".join(random.SystemRandom().choice(alphabet) for _ in range(6))
+
+    def channel(self, cid=None, create=True):
+        with self._lock:
+            now = time.time()
+            for k in [k for k, v in self._ch.items() if now - v["t"] > REMOTE_TTL]:
+                del self._ch[k]
+            ch = self._ch.get(cid) if cid else None
+            if ch is None and create:
+                if not (cid and _ID_RE.match(cid)):
+                    cid = self._new_id()
+                    while cid in self._ch:
+                        cid = self._new_id()
+                ch = {"id": cid, "seq": 0, "msgs": [], "cond": threading.Condition(), "state": {}, "t": now}
+                self._ch[cid] = ch
+            if ch:
+                ch["t"] = now
+            return ch
+
+    def send(self, ch, text, action):
+        with ch["cond"]:
+            ch["seq"] += 1
+            ch["msgs"].append({"seq": ch["seq"], "text": text, "action": action, "t": time.time()})
+            ch["msgs"] = ch["msgs"][-20:]
+            ch["cond"].notify_all()
+
+    def poll(self, ch, since, timeout=25.0):
+        deadline = time.time() + timeout
+        with ch["cond"]:
+            while True:
+                pending = [m for m in ch["msgs"] if m["seq"] > since]
+                if pending or time.time() >= deadline:
+                    return {"seq": ch["seq"], "messages": pending}
+                ch["cond"].wait(max(0.0, deadline - time.time()))
+
+
+REMOTE = Remote()
+
+
+def qr_svg(data):
+    if not qrcode:
+        return None
+    img = qrcode.make(data, image_factory=qrcode.image.svg.SvgPathImage, box_size=10, border=2)
+    return img.to_string()
+
+
+PHONE_PAGE = """<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>MoonTV 电视输入</title>
+<style>
+body{font-family:-apple-system,"Segoe UI","Noto Sans",sans-serif;background:#0f1117;color:#e8e8ec;margin:0;padding:22px}
+h1{font-size:22px;color:#fad778;margin:0 0 6px}#ctx{color:#8f94a3;font-size:14px;min-height:20px;margin-bottom:14px}
+textarea{width:100%;box-sizing:border-box;font-size:20px;padding:12px;border-radius:12px;border:2px solid #2a2f40;background:#1a1d28;color:#fff;min-height:120px;outline:none}
+textarea:focus{border-color:#fad778}button{width:100%;font-size:20px;padding:15px;margin-top:12px;border-radius:12px;border:0}
+.send{background:#2a2f40;color:#e8e8ec}.go{background:#fad778;color:#111;font-weight:600}#msg{margin-top:12px;color:#8f94a3;font-size:14px;min-height:20px}
+</style></head><body>
+<h1>MoonTV 电视输入</h1><div id="ctx">连接电视中…</div>
+<textarea id="t" autofocus placeholder="在手机上打字，发送到电视"></textarea>
+<button class="send" onclick="send('input')">发送到电视（填入）</button>
+<button class="go" id="go" onclick="send('submit')">确认</button>
+<div id="msg"></div>
+<script>
+var ID=__ID__;
+function st(){fetch('/remote/'+ID+'/state').then(function(r){return r.ok?r.json():null}).then(function(s){
+  var go=document.getElementById('go'),c=document.getElementById('ctx');
+  if(!s||!s.open){go.textContent='确认';c.textContent='电视当前没有打开键盘（在电视上进入搜索或登录页）';return}
+  go.textContent=s.label||'确认';c.textContent='电视正在等待输入 · 按钮 = 电视上的「'+(s.label||'确认')+'」'+(s.value?'　当前：'+s.value:'');
+}).catch(function(){document.getElementById('ctx').textContent='无法连接桥接服务'})}
+st();setInterval(st,4000);
+function send(a){var v=document.getElementById('t').value;
+ fetch('/remote/'+ID+'/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:v,action:a})})
+ .then(function(r){document.getElementById('msg').textContent=r.ok?'已发送 ✓':(r.status===404?'电视未连接，请在电视上重新打开键盘':'发送失败');if(r.ok&&a==='submit')document.getElementById('t').value='';})
+ .catch(function(){document.getElementById('msg').textContent='发送失败'})}
+</script></body></html>"""
 
 
 # --------------------------------------------------------------------------- stream probe
@@ -623,6 +721,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return None
             if p == "/health":
                 return self._json({"ok": True, "upstream": UPSTREAM, "app": bool(APP_DIR), "sim": bool(SIM_FILE)})
+            if p.startswith("/r/"):
+                cid = p[3:]
+                if not _ID_RE.match(cid):
+                    return self._error(404, "not found")
+                return self._send(200, PHONE_PAGE.replace("__ID__", json.dumps(cid)).encode("utf-8"), "text/html; charset=utf-8")
+            if p.startswith("/remote/"):
+                parts = p.split("/")          # ['', 'remote', '<id>', '<op>']
+                if len(parts) != 4:
+                    return self._error(404, "not found")
+                ch = REMOTE.channel(parts[2], create=False)
+                if ch is None:
+                    return self._error(404, "no such channel")
+                if parts[3] == "qr.svg":
+                    svg = qr_svg("http://%s/r/%s" % (self.headers.get("Host", "localhost:%d" % LISTEN_PORT), ch["id"]))
+                    if svg is None:
+                        return self._error(501, "qrcode not installed")
+                    return self._send(200, svg, "image/svg+xml", cache=86400)
+                if parts[3] == "poll":
+                    return self._json(REMOTE.poll(ch, int(g("since", 0) or 0)))
+                if parts[3] == "state":
+                    return self._json(ch["state"])
+                return self._error(404, "not found")
             if p == "/seed-accounts":
                 return self._json([{"username": u, "password": pw} for u, pw in SEED_ACCOUNTS])
             if p == "/me":
@@ -688,6 +808,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ValueError:
             return self._error(400, "invalid json")
         try:
+            if p == "/remote/new":
+                ch = REMOTE.channel((body.get("id") or "").strip(), create=True)
+                host = self.headers.get("Host", "localhost:%d" % LISTEN_PORT)
+                return self._json({"id": ch["id"], "seq": ch["seq"], "url": "http://%s/r/%s" % (host, ch["id"])})
+            if p.startswith("/remote/"):
+                parts = p.split("/")
+                ch = REMOTE.channel(parts[2], create=False) if len(parts) == 4 else None
+                if ch is None:
+                    return self._error(404, "no such channel")
+                if parts[3] == "send":
+                    text = str(body.get("text") or "")[:500]
+                    action = body.get("action") if body.get("action") in ("input", "submit") else "input"
+                    REMOTE.send(ch, text, action)
+                    return self._json({"ok": True, "seq": ch["seq"]})
+                if parts[3] == "state":
+                    ch["state"] = {"open": bool(body.get("open")), "label": str(body.get("label") or "")[:20], "value": str(body.get("value") or "")[:100]}
+                    return self._json({"ok": True})
+                return self._error(404, "not found")
             if p == "/login":
                 user, pw = (body.get("username") or "").strip(), body.get("password") or ""
                 if not user or not pw:

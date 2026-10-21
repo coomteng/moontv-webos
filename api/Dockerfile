@@ -1,5 +1,5 @@
 FROM python:3.11-alpine
-RUN pip install --no-cache-dir pypinyin==0.55.0
+RUN pip install --no-cache-dir pypinyin==0.55.0 "qrcode>=7.4,<9"
 WORKDIR /app
 # build context = repo root (see compose.snippet.yml)
 COPY api/moontv-api.py /app/moontv-api.py

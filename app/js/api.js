@@ -102,6 +102,12 @@ var API = (function () {
     logout: function () { var t = session; session = ''; return t ? request('POST', '/logout', { session: t }, 10000, true).then(null, function () {}) : Promise.resolve(); },
     me: function () { return get('/me'); },
     seedAccounts: function () { return get('/seed-accounts', null, 10000); },
+    /* --- phone-as-keyboard --- */
+    remoteNew: function (id) { return request('POST', '/remote/new', { id: id || '' }, 10000, true); },
+    remotePoll: function (id, since) { return get('/remote/' + id + '/poll', { since: since }, 35000); },
+    remoteState: function (id, state) { return request('POST', '/remote/' + id + '/state', state, 5000, true).then(null, function () {}); },
+    remoteQr: function (id) { return BASE + '/remote/' + id + '/qr.svg'; },
+    base: function () { return BASE; },
     setSession: function (t) { session = t || ''; },
     hasSession: function () { return !!session; },
     setReauth: function (fn) { reauth = fn; },

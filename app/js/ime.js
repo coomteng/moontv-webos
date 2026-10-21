@@ -44,6 +44,72 @@ var IME = (function () {
   var cb = {};
   var root, keysEl, candsEl, textEl, bufEl, pageEl;
 
+  /* ---- phone-as-keyboard: a channel on the bridge, shown as a QR code next to the keys.
+   * The id is kept in localStorage so the phone's bookmarked page keeps working across sessions. */
+  var remoteId = '';
+  var remoteSeq = 0;
+  var remoteUrl = '';
+  var polling = false;
+  var pollGen = 0;
+
+  function remoteStart() {
+    var saved = '';
+    try { saved = window.localStorage.getItem('moontv.remoteId') || ''; } catch (e) { /* ignore */ }
+    API.remoteNew(saved).then(function (r) {
+      if (!r || !r.id) return;
+      remoteId = r.id; remoteSeq = r.seq || 0; remoteUrl = r.url || '';
+      try { window.localStorage.setItem('moontv.remoteId', remoteId); } catch (e2) { /* ignore */ }
+      renderRemote();
+      remoteState();
+      pollLoop(++pollGen);
+    }, function () { remoteId = ''; renderRemote(); });
+  }
+
+  function remoteState() {
+    if (!remoteId) return;
+    API.remoteState(remoteId, { open: open, label: goLabel, value: open ? (text + buf) : '' });
+  }
+
+  function pollLoop(gen) {
+    if (!open || gen !== pollGen || !remoteId) { polling = false; return; }
+    polling = true;
+    API.remotePoll(remoteId, remoteSeq).then(function (r) {
+      if (!open || gen !== pollGen) { polling = false; return; }
+      if (r && r.messages) {
+        for (var i = 0; i < r.messages.length; i++) applyRemote(r.messages[i]);
+        if (r.seq) remoteSeq = r.seq;
+      }
+      pollLoop(gen);
+    }, function () {
+      if (!open || gen !== pollGen) { polling = false; return; }
+      setTimeout(function () { pollLoop(gen); }, 3000);   /* bridge hiccup: retry */
+    });
+  }
+
+  function applyRemote(m) {
+    var v = String(m.text || '');
+    buf = '';
+    text = v;
+    recompute();
+    notify();
+    render();
+    if (m.action === 'submit') submit();
+    else UI.toast('已收到手机输入');
+  }
+
+  function renderRemote() {
+    var box = $('ime-remote');
+    if (!box) return;
+    var img = $('ime-qr');
+    if (remoteId) {
+      img.src = API.remoteQr(remoteId) + '?v=' + remoteId;
+      UI.removeClass(box, 'hidden');
+      $('ime-remote-url').textContent = remoteUrl.replace(/^https?:\/\//, '');
+    } else {
+      UI.addClass(box, 'hidden');
+    }
+  }
+
   function $(id) { return document.getElementById(id); }
 
   /* ---------------------------------------------------------------- data */
@@ -339,11 +405,14 @@ var IME = (function () {
     open = true;
     UI.addClass(root, 'show');
     render();
+    remoteStart();
   }
 
   function close() {
     if (!open) return;
     open = false;
+    pollGen++;
+    remoteState();
     UI.removeClass(root, 'show');
     if (cb.onClose) cb.onClose(text + buf);
   }
