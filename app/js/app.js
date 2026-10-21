@@ -93,7 +93,13 @@ var App = (function () {
   /* current user shown in the top bar; '' = bridge default account */
   var currentUser = '';
   function setUser(u) {
+    var changed = (u || '') !== currentUser;
     currentUser = u || '';
+    if (changed) {
+      /* per-user state must not leak across accounts */
+      Records.set([]);
+      for (var n in views) if (views.hasOwnProperty(n) && views[n].reset) views[n].reset();
+    }
     var el = UI.$('tab-user');
     if (el) el.textContent = currentUser ? '\u25CF ' + currentUser : '登录';
   }

@@ -156,7 +156,16 @@
     }).then(done, fail);
   }
 
+  /* Called by App when the user changes: forget everything fetched for the previous user. */
+  function reset() {
+    data = null;
+    loaded = false;
+    loadingNow = false;
+    UI.empty(UI.$('home-rows'));
+  }
+
   App.register('home', {
+    reset: reset,
     enter: function (params, isBack) {
       if (!loaded) { load(); return; }
       if (isBack) refreshContinue();
