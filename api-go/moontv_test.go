@@ -394,12 +394,12 @@ func TestSeedAccounts(t *testing.T) {
 
 func TestTitleVariantsAndPinyinIndex(t *testing.T) {
 	cases := map[string][]string{
-		"现在就出发 第四季": {"现在就出发 第四季", "现在就出发"},
-		"兰香如故":        {"兰香如故"},
+		"现在就出发 第四季":            {"现在就出发 第四季", "现在就出发"},
+		"兰香如故":                 {"兰香如故"},
 		"出差沟通之神：SEVENTEEN团结大会": {"出差沟通之神：SEVENTEEN团结大会", "出差沟通之神"},
-		"2026年世界杯": nil,
-		"  ":        nil,
-		"Westworld": nil,
+		"2026年世界杯":             nil,
+		"  ":                   nil,
+		"Westworld":            nil,
 	}
 	for in, want := range cases {
 		if got := titleVariants(in); !reflect.DeepEqual(got, want) {

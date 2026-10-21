@@ -24,9 +24,9 @@ type Upstream struct {
 	Username string
 	password string
 
-	mu     sync.Mutex
+	mu      sync.Mutex
 	cookie_ string
-	at     time.Time
+	at      time.Time
 }
 
 func newUpstream(base, user, pass string) *Upstream {
