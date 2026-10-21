@@ -3,6 +3,24 @@
 A remote-control-friendly front end for [MoonTV / LunaTV](https://github.com/MoonTechLab/LunaTV) that runs on
 **old LG webOS TVs (webOS 4.x, Chrome 53 WebView)** where the stock MoonTV web UI cannot run (it needs ES2018+).
 
+![Home](docs/screenshots/01-home.jpg)
+
+| Browse with filters | Built-in pinyin keyboard |
+|---|---|
+| ![Browse](docs/screenshots/02-browse.jpg) | ![Pinyin keyboard](docs/screenshots/03-pinyin-keyboard.jpg) |
+
+| Search results grouped by title | Per-source speed / resolution probe |
+|---|---|
+| ![Search](docs/screenshots/04-search.jpg) | ![Detail with probe](docs/screenshots/05-detail-probe.jpg) |
+
+## Features
+- **Runs on Chrome 53** — plain ES5 + flexbox, no framework, no build step; an acorn `ecmaVersion: 5` gate keeps it that way.
+- **Remote-first UI** — deterministic focus navigation, big type, dark theme; Back key (461) handled in JS.
+- **Source probing** — every source is measured (latency, download speed, resolution via master playlist or H.264 SPS); the best one is auto-selected, dead ones are greyed out.
+- **Pinyin keyboard** — EU TVs ship no Chinese IME; the app includes one (full/abbreviated pinyin, prefix completion, live title index from your MoonTV so new shows are typeable without reinstalling).
+- **Native HLS playback** with resume, auto-next, and play records synced with the MoonTV web UI.
+- **Browser simulator** — open `http://<bridge>:8788/` on any computer: a scaled 1920×1080 "TV" running the exact same app, plus an on-screen remote (keyboard mapped). Playback via hls.js there; on the TV it stays native.
+
 ```
 TV app (ES5 + flexbox, com.ting.moontv) ──JSON──▶ moontv-api (Python, Docker sidecar) ──▶ MoonTV :3000
                                      └── <video src=m3u8> plays HLS natively
@@ -12,6 +30,7 @@ TV app (ES5 + flexbox, com.ting.moontv) ──JSON──▶ moontv-api (Python, 
 |---|---|
 | `app/` | The webOS app: home rows, category browse with filters, search with a **built-in pinyin keyboard**, detail with **per-source speed/resolution probing**, HLS player with resume. See `app/README.md`. |
 | `api/` | `moontv-api.py`: stdlib-only bridge that logs into MoonTV, exposes CORS JSON (`/home /list /search /detail /record /poster /probe /titles`), caches posters, probes stream quality. Dockerfile + compose snippet included. |
+| `sim/` | Browser TV simulator page served by the bridge at `/sim` (`/` redirects there); the app itself is served at `/tv/`. |
 | `tools/` | `gen_pinyin.py` builds `app/js/pinyin-data.js` from jieba + pypinyin. |
 | `test/` | Headless Chrome walk-through (`walk.js`) used to verify the app at 1920×1080 without a TV. |
 
@@ -22,6 +41,9 @@ TV app (ES5 + flexbox, com.ting.moontv) ──JSON──▶ moontv-api (Python, 
    Update after edits: `docker build -t moontv-api:local moontv-api && docker restart moontv-api`.
 2. **App** — set `BASE` in `app/js/api.js` to `http://<bridge-host>:8788`, then
    `ares-package app -o dist && ares-install --device <tv> dist/*.ipk` (LG Developer Mode required). Details in `app/README.md`.
+
+Testing without the TV: open `http://<bridge-host>:8788/` — the simulator loads the app from the same origin, so no
+`BASE` edit is needed. On the TV the app is loaded from `file://` and uses the `BASE` constant instead.
 
 Why a bridge: the app is loaded from `file://`, so it cannot carry MoonTV's `SameSite=lax` auth cookie; the bridge
 logs in on its behalf. Only the Python stdlib is used (plus optional `pypinyin` for the live title index).

@@ -19,6 +19,7 @@ ares-inspect --device <tv> --app com.ting.moontv      # Chrome DevTools tunnel
 Bump `"version"` in `appinfo.json` when changing files (the ipk filename follows it).
 
 ## Local checks (no TV needed)
+- Browser simulator with on-screen remote: `http://<bridge-host>:8788/` (served by the bridge; same app, hls.js for playback).
 - ES5 gate: `for f in app/js/*.js; do node -e "require('acorn').parse(require('fs').readFileSync('$f','utf8'),{ecmaVersion:5})"; done`
 - Headless walk-through with puppeteer-core + Chrome (screenshots to `test/`): `node test/walk.js`
 

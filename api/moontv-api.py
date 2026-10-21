@@ -25,6 +25,7 @@ import gzip
 import hashlib
 import http.server
 import json
+import mimetypes
 import os
 import re
 import socketserver
@@ -43,6 +44,9 @@ LISTEN_PORT = int(os.environ.get("MOONTV_PORT", "8788"))
 CACHE_DIR = os.environ.get("MOONTV_CACHE", os.path.expanduser("~/.cache/moontv-api"))
 POSTER_TTL = 7 * 24 * 3600
 LIST_TTL = 10 * 60  # douban lists change slowly; cache in memory 10 min
+# Optional: serve the TV app itself (for the browser simulator). Empty = disabled.
+APP_DIR = os.environ.get("MOONTV_APP_DIR", "")
+SIM_FILE = os.environ.get("MOONTV_SIM", "")
 
 
 def log(msg):
@@ -461,6 +465,26 @@ def probe_many(items, workers=8, fresh=False):
         return list(ex.map(one, items))
 
 
+# --------------------------------------------------------------------------- static (app + simulator)
+def static_file(root, rel):
+    """Return (bytes, content-type) for rel inside root, or None if missing / outside root."""
+    if not root:
+        return None
+    base = os.path.realpath(root)
+    full = os.path.realpath(os.path.join(base, rel.lstrip("/")))
+    if full != base and not full.startswith(base + os.sep):
+        return None
+    if os.path.isdir(full):
+        full = os.path.join(full, "index.html")
+    if not os.path.isfile(full):
+        return None
+    ctype, _ = mimetypes.guess_type(full)
+    if ctype and ctype.startswith("text/") or ctype in ("application/javascript", "application/json"):
+        ctype += "; charset=utf-8"
+    with open(full, "rb") as fh:
+        return fh.read(), ctype or "application/octet-stream"
+
+
 # --------------------------------------------------------------------------- http
 class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -514,8 +538,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(u.query)
         g = lambda k, d=None: (qs.get(k) or [d])[0]  # noqa: E731
         try:
+            if p == "/" and SIM_FILE:
+                self.send_response(302)
+                self._cors()
+                self.send_header("Location", "/sim")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return None
+            if p == "/sim" and SIM_FILE and os.path.isfile(SIM_FILE):
+                with open(SIM_FILE, "rb") as fh:
+                    return self._send(200, fh.read(), "text/html; charset=utf-8")
+            if p == "/tv" or p.startswith("/tv/"):
+                hit = static_file(APP_DIR, p[3:] or "/")
+                if not hit:
+                    return self._error(404, "not found")
+                data, ctype = hit
+                self.send_response(200)
+                self._cors()
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(data)
+                return None
             if p == "/health":
-                return self._json({"ok": True, "upstream": UPSTREAM})
+                return self._json({"ok": True, "upstream": UPSTREAM, "app": bool(APP_DIR), "sim": bool(SIM_FILE)})
             if p == "/home":
                 return self._json({
                     "continue": continue_watching(),

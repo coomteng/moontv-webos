@@ -3,7 +3,11 @@
 var API = (function () {
   'use strict';
 
-  var BASE = 'http://BRIDGE_HOST:8788';
+  /* On the TV the app is loaded from file:// and needs an explicit bridge address.
+   * When served by the bridge itself (http://<bridge>:8788/tv/) use the same origin. */
+  var BASE = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
+    ? window.location.protocol + '//' + window.location.host
+    : 'http://BRIDGE_HOST:8788';
   var DEFAULT_TIMEOUT = 20000;
 
   function qs(params) {

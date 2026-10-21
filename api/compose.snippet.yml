@@ -1,6 +1,8 @@
 # Add this service to the MoonTV stack (Portainer stack "moontv", docker-compose.yml)
   moontv-api:
-    build: ./moontv-api          # directory containing api/moontv-api.py + Dockerfile
+    build:
+      context: ./moontv-webos     # the repo checkout (needs api/, app/, sim/)
+      dockerfile: api/Dockerfile
     image: moontv-api:local
     container_name: moontv-api
     restart: unless-stopped

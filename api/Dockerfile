@@ -1,10 +1,16 @@
 FROM python:3.11-alpine
 RUN pip install --no-cache-dir pypinyin==0.55.0
 WORKDIR /app
-COPY moontv-api.py /app/moontv-api.py
+# build context = repo root (see compose.snippet.yml)
+COPY api/moontv-api.py /app/moontv-api.py
+# TV app + browser simulator served at /tv/ and /sim (optional: drop these two lines for API-only)
+COPY app /app/tv
+COPY sim /app/sim
 ENV MOONTV_UPSTREAM=http://moontv-core:3000 \
     MOONTV_CACHE=/cache \
     MOONTV_PORT=8788 \
+    MOONTV_APP_DIR=/app/tv \
+    MOONTV_SIM=/app/sim/index.html \
     PYTHONUNBUFFERED=1
 VOLUME ["/cache"]
 EXPOSE 8788

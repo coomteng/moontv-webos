@@ -151,8 +151,14 @@
     renderTitle();
     markCurrentEp();
     setState('加载中…');
-    video.src = result.episodes[i];
-    try { video.load(); } catch (e) { /* ignore */ }
+    /* On the TV: native HLS via <video src>. In the desktop simulator, window.HLS_SHIM (hls.js
+     * adapter injected by sim/index.html) attaches MSE playback instead. */
+    if (window.HLS_SHIM && window.HLS_SHIM.attach) {
+      window.HLS_SHIM.attach(video, result.episodes[i]);
+    } else {
+      video.src = result.episodes[i];
+      try { video.load(); } catch (e) { /* ignore */ }
+    }
     var p = null;
     try { p = video.play(); } catch (e2) { /* ignore */ }
     if (p && p.then) p.then(null, function () { /* autoplay may be rejected headless; ignore */ });
