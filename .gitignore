@@ -1,0 +1,9 @@
+dist/
+test/*.png
+worker-report.md
+__pycache__/
+*.pyc
+.DS_Store
+TODO.md
+SPEC.md
+local.env

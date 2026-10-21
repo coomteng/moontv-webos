@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>MoonTV</title>
+  <meta name="viewport" content="width=1920, height=1080">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+  <!-- Top bar: shared by every view except the player -->
+  <div id="topbar">
+    <div class="logo">MoonTV</div>
+    <div class="tab" data-view="home">首页</div>
+    <div class="tab" data-view="search">搜索</div>
+    <div class="tab" data-view="browse" data-type="movie">电影</div>
+    <div class="tab" data-view="browse" data-type="tv">剧集</div>
+    <div class="tab" data-view="browse" data-type="anime">动漫</div>
+    <div class="tab" data-view="browse" data-type="show">综艺</div>
+    <div class="spacer"></div>
+    <div class="clock" id="clock">--:--</div>
+  </div>
+
+  <!-- Home: five horizontal rows -->
+  <div id="home" class="view">
+    <div id="home-scroll">
+      <div id="home-rows"></div>
+    </div>
+  </div>
+
+  <!-- Browse: filter chips + poster grid (movie / tv / anime / show) -->
+  <div id="browse" class="view">
+    <div id="browse-head">
+      <div id="browse-title"></div>
+      <div id="browse-filters"></div>
+    </div>
+    <div id="browse-scroll">
+      <div id="browse-grid" class="grid"></div>
+      <div id="browse-empty" class="empty"></div>
+    </div>
+  </div>
+
+  <!-- Search: input + history chips + grouped results -->
+  <div id="search" class="view">
+    <div id="search-head">
+      <input id="search-input" type="text" placeholder="输入片名，按确认键打开拼音键盘" autocomplete="off">
+      <div class="btn" id="search-btn">搜索</div>
+    </div>
+    <div id="search-status"></div>
+    <div id="search-history">
+      <div class="section-title">最近搜索</div>
+      <div class="chips" id="search-history-chips"></div>
+    </div>
+    <div id="search-scroll">
+      <div id="search-grid" class="grid"></div>
+    </div>
+  </div>
+
+  <!-- Detail: poster + info + sources + episode grid -->
+  <div id="detail" class="view">
+    <div id="detail-bg"></div>
+    <div id="detail-body">
+      <div id="detail-poster"></div>
+      <div id="detail-info">
+        <div id="detail-title"></div>
+        <div id="detail-meta"></div>
+        <div id="detail-desc"></div>
+        <div id="detail-actions"></div>
+        <div class="section-title" id="detail-sources-title">换源</div>
+        <div id="detail-sources-wrap"><div id="detail-sources" class="chips"></div></div>
+        <div class="section-title" id="detail-ep-title">选集</div>
+        <div id="detail-episodes-wrap">
+          <div id="detail-episodes"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Player: fullscreen video + OSD -->
+  <div id="player" class="view">
+    <video id="video" autoplay preload="auto"></video>
+    <div id="osd-state"></div>
+    <div id="osd">
+      <div id="osd-title"><span class="name"></span><span class="ep-name"></span></div>
+      <div id="osd-time">00:00 / 00:00</div>
+      <div id="osd-bar"><div class="buf"></div><div class="pos"></div></div>
+      <div id="osd-hint">确认键 播放/暂停 · ←→ 快退/快进 10 秒 · ↑↓ 选集 · 返回键 退出</div>
+      <div id="osd-eps-wrap"><div id="osd-eps"></div></div>
+    </div>
+  </div>
+
+  <div id="loading"><div class="spinner"></div><div class="loading-text">加载中…</div></div>
+
+  <!-- On-screen pinyin keyboard (overlay, driven by js/ime.js) -->
+  <div id="ime">
+    <div id="ime-panel">
+      <div id="ime-input"><span id="ime-text"></span><span id="ime-buf"></span><span id="ime-placeholder">拼音输入，选字后按「搜索」</span></div>
+      <div id="ime-cands-wrap"><div id="ime-cands"></div><div id="ime-cands-page"></div></div>
+      <div id="ime-keys"></div>
+      <div id="ime-hint">数字键 选字 · 绿键 首选 · 红键 删除 · 黄键 中/EN · 蓝键 搜索 · 返回 删除/关闭</div>
+    </div>
+  </div>
+  <div id="toast"></div>
+
+  <script src="js/util.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/cards.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/home.js"></script>
+  <script src="js/browse.js"></script>
+  <script src="js/pinyin-data.js"></script>
+  <script src="js/ime.js"></script>
+  <script src="js/search.js"></script>
+  <script src="js/detail.js"></script>
+  <script src="js/player.js"></script>
+</body>
+</html>
