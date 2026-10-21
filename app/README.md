@@ -11,7 +11,9 @@ Set `BASE` in `js/api.js` to your bridge URL, e.g. `http://192.168.1.10:8788`.
 ```bash
 npm install -g @webos-tools/cli
 ares-setup-device            # register your TV (Developer Mode app: Key Server ON)
-ares-package app -o dist
+echo 'BRIDGE_BASE=http://<bridge-host>:8788' > local.env   # git-ignored
+tools/build_ipk.sh           # substitutes the bridge address and runs ares-package → dist/
+# (or edit BASE in app/js/api.js by hand and run: ares-package app -o dist)
 ares-install --device <tv> dist/com.ting.moontv_<ver>_all.ipk
 ares-launch  --device <tv> com.ting.moontv
 ares-inspect --device <tv> --app com.ting.moontv      # Chrome DevTools tunnel
