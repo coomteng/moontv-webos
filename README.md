@@ -1,5 +1,7 @@
 # MoonTV for LG webOS
 
+[English](README.md) · [中文](README.zh-CN.md)
+
 A remote-control-friendly front end for [MoonTV / LunaTV](https://github.com/MoonTechLab/LunaTV) that runs on
 **old LG webOS TVs (webOS 4.x, Chrome 53 WebView)** where the stock MoonTV web UI cannot run (it needs ES2018+).
 
@@ -8,6 +10,12 @@ A remote-control-friendly front end for [MoonTV / LunaTV](https://github.com/Moo
 | Category browsing with filters | Built-in pinyin keyboard |
 |---|---|
 | ![Browse](docs/screenshots/02-browse.jpg) | ![Pinyin keyboard](docs/screenshots/03-pinyin-keyboard.jpg) |
+
+**Phone as keyboard** — scan the QR code shown next to the on-screen keyboard, type on your phone, done:
+
+| TV: keyboard with QR code | Phone: input page |
+|---|---|
+| ![TV keyboard with QR](docs/screenshots/04-phone-qr.jpg) | <img src="docs/screenshots/05-phone-input.jpg" width="260" alt="Phone input page"> |
 
 ## Features
 - **Runs on Chrome 53** — plain ES5 + flexbox, no framework, no build step; an acorn `ecmaVersion: 5` gate keeps it that way.
