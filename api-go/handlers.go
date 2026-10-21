@@ -306,7 +306,7 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := map[string][]Item{}
 	for _, s := range []struct{ key, kind, tag, region string }{
-		{"movie", "movie", "热门", "全部"}, {"tv", "tv", "全部", ""}, {"anime", "anime", "动画", ""}, {"show", "show", "综艺", ""},
+		{"movie", "movie", "热门电影", "全部"}, {"tv", "tv", "最近热门", "全部"}, {"anime", "anime", "番剧", ""}, {"show", "show", "最近热门", "全部"},
 	} {
 		items, err := a.doubanList(s.kind, s.tag, s.region, 0, 20)
 		if err != nil {

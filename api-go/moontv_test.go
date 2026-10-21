@@ -45,6 +45,11 @@ func fakeMoonTV(t *testing.T) (*httptest.Server, *struct{ logins, lists int }) {
 		q := r.URL.Query()
 		w.Write([]byte(`{"code":200,"list":[{"id":"1","title":"` + q.Get("kind") + "/" + q.Get("category") + "/" + q.Get("type") + `","poster":"http://p/1.jpg","rate":"8.1","year":"2026"}]}`))
 	}))
+	mux.HandleFunc("/api/douban/recommends", auth(func(w http.ResponseWriter, r *http.Request) {
+		counters.lists++
+		q := r.URL.Query()
+		w.Write([]byte(`{"code":200,"list":[{"id":"3","title":"rec:` + q.Get("kind") + "/" + q.Get("category") + "/" + q.Get("format") + `","poster":"http://p/3.jpg","rate":"","year":""}]}`))
+	}))
 	mux.HandleFunc("/api/playrecords", auth(func(w http.ResponseWriter, r *http.Request) {
 		c, _ := r.Cookie("auth")
 		if r.Method == "POST" {
@@ -233,6 +238,15 @@ func TestHomePerUserAndKeyOrder(t *testing.T) {
 		strings.Index(s, `"movie"`) < strings.Index(s, `"tv"`) && strings.Index(s, `"anime"`) < strings.Index(s, `"show"`)) {
 		t.Fatalf("key order wrong: %s", s[:200])
 	}
+	var rows struct {
+		Anime []Item `json:"anime"`
+		Show  []Item `json:"show"`
+		TV    []Item `json:"tv"`
+	}
+	decode(t, b1, &rows)
+	if rows.Anime[0].Title == rows.Show[0].Title || rows.Anime[0].Title != "rec:tv/动画/电视剧" || rows.Show[0].Title != "tv/show/show" || rows.TV[0].Title != "tv/tv/tv" {
+		t.Fatalf("home rows must come from distinct tags: anime=%v show=%v tv=%v", rows.Anime[0].Title, rows.Show[0].Title, rows.TV[0].Title)
+	}
 	// shared lists are cached: second /home must not hit douban again
 	n := counters.lists
 	get(t, srv.URL+"/home", nil)
@@ -264,20 +278,29 @@ func TestListFiltersAndValidation(t *testing.T) {
 	if len(items) != 1 || items[0].Title != "movie/豆瓣高分/日本" {
 		t.Fatalf("movie list: %s", b)
 	}
-	_, _, b = get(t, srv.URL+"/list?type=tv&tag=韩剧", nil)
-	decode(t, b, &items)
-	if items[0].Title != "tv/最近热门/韩剧" {
-		t.Fatalf("tv list routes via categories: %s", b)
+	// every chip maps to exactly the request MoonTV's web UI makes
+	cases := map[string]string{
+		"/list?type=movie": "movie/热门/全部",
+		"/list?type=movie&tag=最新电影&region=韩国": "movie/最新/韩国",
+		"/list?type=tv":             "tv/tv/tv",
+		"/list?type=tv&region=韩国":   "tv/tv/tv_korean",
+		"/list?type=tv&region=动漫":   "tv/tv/tv_animation",
+		"/list?type=show":           "tv/show/show",
+		"/list?type=show&region=国内": "tv/show/show_domestic",
+		"/list?type=anime":          "rec:tv/动画/电视剧",
+		"/list?type=anime&tag=剧场版":  "rec:movie/动画/",
 	}
-	_, _, b = get(t, srv.URL+"/list?type=anime", nil)
-	decode(t, b, &items)
-	if items[0].Title != "tv/最近热门/动画" {
-		t.Fatalf("anime: %s", b)
+	for path, want := range cases {
+		_, _, b = get(t, srv.URL+path, nil)
+		decode(t, b, &items)
+		if len(items) == 0 || items[0].Title != want {
+			t.Errorf("%s -> %s, want %s", path, b, want)
+		}
 	}
 	_, h, b := get(t, srv.URL+"/filters", nil)
 	var f map[string]filterSet
 	decode(t, b, &f)
-	if f["movie"].Cats[0] != "热门" || len(f["movie"].Regions) != 5 || f["anime"].Cats[0] != "动画" || h.Get("Cache-Control") != "public, max-age=3600" {
+	if f["movie"].Cats[0] != "热门电影" || len(f["movie"].Regions) != 5 || f["tv"].Regions[1] != "国产" || f["anime"].Cats[1] != "剧场版" || f["show"].Regions[2] != "国外" || h.Get("Cache-Control") != "public, max-age=3600" {
 		t.Fatalf("filters: %s %v", b, h)
 	}
 	// key order movie, tv, anime, show is kept for byte-stable output

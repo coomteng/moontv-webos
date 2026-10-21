@@ -35,14 +35,59 @@ type filterSet struct {
 	Regions []string `json:"regions"`
 }
 
+// Filters and upstream requests mirror MoonTV's own web UI (/douban?type=…) exactly — same chip
+// labels, same API calls — recorded by driving the web UI and logging its requests:
+//
+//	movie: categories?kind=movie&category=<热门|最新|豆瓣高分|冷门佳片>&type=<全部|华语|欧美|韩国|日本>
+//	tv:    categories?kind=tv&category=tv&type=<tv|tv_domestic|tv_american|tv_japanese|tv_korean|tv_animation|tv_documentary>
+//	show:  categories?kind=tv&category=show&type=<show|show_domestic|show_foreign>
+//	anime: 番剧   recommends?kind=tv&category=动画&format=电视剧&…    剧场版 recommends?kind=movie&category=动画&format=&…
+//	       (the web's third tab 每日放送 is a bangumi calendar, not a list; not offered here)
+//
+// The TV app shows row 1 as "cats" and row 2 as "regions"; the labels below are the web's labels.
 var filterOrder = []string{"movie", "tv", "anime", "show"}
 var filters = map[string]filterSet{
-	"movie": {Cats: []string{"热门", "最新", "豆瓣高分", "冷门佳片"}, Regions: []string{"全部", "华语", "欧美", "韩国", "日本"}},
-	"tv":    {Cats: []string{"全部", "国产剧", "欧美剧", "韩剧", "日剧", "港剧"}, Regions: []string{}},
-	"anime": {Cats: []string{"动画"}, Regions: []string{}},
-	"show":  {Cats: []string{"综艺"}, Regions: []string{}},
+	"movie": {Cats: []string{"热门电影", "最新电影", "豆瓣高分", "冷门佳片"}, Regions: []string{"全部", "华语", "欧美", "韩国", "日本"}},
+	"tv":    {Cats: []string{"最近热门"}, Regions: []string{"全部", "国产", "欧美", "日本", "韩国", "动漫", "纪录片"}},
+	"anime": {Cats: []string{"番剧", "剧场版"}, Regions: []string{}},
+	"show":  {Cats: []string{"最近热门"}, Regions: []string{"全部", "国内", "国外"}},
 }
-var tvType = map[string]string{"全部": "tv", "国产剧": "国产剧", "欧美剧": "欧美剧", "韩剧": "韩剧", "日剧": "日剧", "港剧": "港剧", "动画": "动画", "综艺": "综艺"}
+
+var movieCat = map[string]string{"热门电影": "热门", "最新电影": "最新", "豆瓣高分": "豆瓣高分", "冷门佳片": "冷门佳片"}
+var tvType = map[string]string{"全部": "tv", "国产": "tv_domestic", "欧美": "tv_american", "日本": "tv_japanese", "韩国": "tv_korean", "动漫": "tv_animation", "纪录片": "tv_documentary"}
+var showType = map[string]string{"全部": "show", "国内": "show_domestic", "国外": "show_foreign"}
+
+// upstreamListPath builds the exact request MoonTV's web UI would make for a chip combination.
+func upstreamListPath(kind, tag, region string, start, size int) string {
+	switch kind {
+	case "movie":
+		c := movieCat[tag]
+		if c == "" {
+			c = "热门"
+		}
+		if region == "" {
+			region = "全部"
+		}
+		return fmt.Sprintf("/api/douban/categories?kind=movie&category=%s&type=%s&limit=%d&start=%d", q(c), q(region), size, start)
+	case "tv":
+		t := tvType[region]
+		if t == "" {
+			t = "tv"
+		}
+		return fmt.Sprintf("/api/douban/categories?kind=tv&category=tv&type=%s&limit=%d&start=%d", t, size, start)
+	case "show":
+		t := showType[region]
+		if t == "" {
+			t = "show"
+		}
+		return fmt.Sprintf("/api/douban/categories?kind=tv&category=show&type=%s&limit=%d&start=%d", t, size, start)
+	default: // anime
+		if tag == "剧场版" {
+			return fmt.Sprintf("/api/douban/recommends?kind=movie&limit=%d&start=%d&category=%s&format=&region=all&year=all&platform=all&sort=T&label=all", size, start, q("动画"))
+		}
+		return fmt.Sprintf("/api/douban/recommends?kind=tv&limit=%d&start=%d&category=%s&format=%s&region=all&year=all&platform=all&sort=T&label=all", size, start, q("动画"), q("电视剧"))
+	}
+}
 
 // filtersJSON renders filters in a stable key order.
 func filtersJSON() []byte {
@@ -65,21 +110,12 @@ func (a *App) doubanList(kind, tag, region string, start, size int) ([]Item, err
 	if tag == "" {
 		tag = filters[kind].Cats[0]
 	}
-	if region == "" {
-		region = "全部"
+	if region == "" && len(filters[kind].Regions) > 0 {
+		region = filters[kind].Regions[0]
 	}
 	key := fmt.Sprintf("douban:%s:%s:%s:%d:%d", kind, tag, region, start, size)
 	v, err := a.mem.get(key, listTTL, func() (interface{}, error) {
-		var path string
-		if kind == "movie" {
-			path = fmt.Sprintf("/api/douban/categories?kind=movie&category=%s&type=%s&limit=%d&start=%d", q(tag), q(region), size, start)
-		} else {
-			t := tvType[tag]
-			if t == "" {
-				t = tag
-			}
-			path = fmt.Sprintf("/api/douban/categories?kind=tv&category=%s&type=%s&limit=%d&start=%d", q("最近热门"), q(t), size, start)
-		}
+		path := upstreamListPath(kind, tag, region, start, size)
 		var res struct {
 			List []map[string]interface{} `json:"list"`
 		}
@@ -352,8 +388,8 @@ func (a *App) buildTitles() (*TitleIndex, error) {
 		log.Printf("titles: history failed %v", err)
 	}
 	type src struct{ kind, tag, region string }
-	for _, s := range []src{{"movie", "热门", "全部"}, {"movie", "最新", "全部"}, {"tv", "全部", ""}, {"tv", "国产剧", ""},
-		{"tv", "欧美剧", ""}, {"tv", "韩剧", ""}, {"tv", "日剧", ""}, {"anime", "动画", ""}, {"show", "综艺", ""}} {
+	for _, s := range []src{{"movie", "热门电影", "全部"}, {"movie", "最新电影", "全部"}, {"tv", "最近热门", "全部"}, {"tv", "最近热门", "国产"},
+		{"tv", "最近热门", "欧美"}, {"tv", "最近热门", "韩国"}, {"tv", "最近热门", "日本"}, {"anime", "番剧", ""}, {"show", "最近热门", "全部"}} {
 		for _, start := range []int{0, 24, 48} {
 			items, err := a.doubanList(s.kind, s.tag, s.region, start, 24)
 			if err != nil {

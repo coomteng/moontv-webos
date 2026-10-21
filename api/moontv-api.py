@@ -209,26 +209,46 @@ def slim_douban(items):
 #   movie: /api/douban/categories?kind=movie&category=<cat>&type=<region>
 #   tv:    /api/douban/categories?kind=tv&category=最近热门&type=<type>
 #   anime/show: same tv categories endpoint with fixed type
+# Filters and upstream requests mirror MoonTV's own web UI (/douban?type=…) exactly — same chip labels,
+# same API calls — recorded by driving the web UI and logging its requests:
+#   movie: categories?kind=movie&category=<热门|最新|豆瓣高分|冷门佳片>&type=<全部|华语|欧美|韩国|日本>
+#   tv:    categories?kind=tv&category=tv&type=<tv|tv_domestic|tv_american|tv_japanese|tv_korean|tv_animation|tv_documentary>
+#   show:  categories?kind=tv&category=show&type=<show|show_domestic|show_foreign>
+#   anime: 番剧 recommends?kind=tv&category=动画&format=电视剧&…   剧场版 recommends?kind=movie&category=动画&format=&…
+#          (the web's third tab 每日放送 is a bangumi calendar, not a list; not offered here)
+# The TV app shows row 1 as "cats" and row 2 as "regions"; the labels below are the web's labels.
 FILTERS = {
-    "movie": {"cats": ["热门", "最新", "豆瓣高分", "冷门佳片"], "regions": ["全部", "华语", "欧美", "韩国", "日本"]},
-    "tv":    {"cats": ["全部", "国产剧", "欧美剧", "韩剧", "日剧", "港剧"], "regions": []},
-    "anime": {"cats": ["动画"], "regions": []},
-    "show":  {"cats": ["综艺"], "regions": []},
+    "movie": {"cats": ["热门电影", "最新电影", "豆瓣高分", "冷门佳片"], "regions": ["全部", "华语", "欧美", "韩国", "日本"]},
+    "tv":    {"cats": ["最近热门"], "regions": ["全部", "国产", "欧美", "日本", "韩国", "动漫", "纪录片"]},
+    "anime": {"cats": ["番剧", "剧场版"], "regions": []},
+    "show":  {"cats": ["最近热门"], "regions": ["全部", "国内", "国外"]},
 }
-TV_TYPE = {"全部": "tv", "国产剧": "国产剧", "欧美剧": "欧美剧", "韩剧": "韩剧", "日剧": "日剧", "港剧": "港剧",
-           "动画": "动画", "综艺": "综艺"}
+MOVIE_CAT = {"热门电影": "热门", "最新电影": "最新", "豆瓣高分": "豆瓣高分", "冷门佳片": "冷门佳片"}
+TV_TYPE = {"全部": "tv", "国产": "tv_domestic", "欧美": "tv_american", "日本": "tv_japanese", "韩国": "tv_korean",
+           "动漫": "tv_animation", "纪录片": "tv_documentary"}
+SHOW_TYPE = {"全部": "show", "国内": "show_domestic", "国外": "show_foreign"}
+
+
+def upstream_list_path(kind, tag, region, start, size):
+    """The exact request MoonTV's web UI would make for a chip combination."""
+    if kind == "movie":
+        return "/api/douban/categories?kind=movie&category=%s&type=%s&limit=%d&start=%d" % (
+            q(MOVIE_CAT.get(tag, "热门")), q(region or "全部"), size, start)
+    if kind == "tv":
+        return "/api/douban/categories?kind=tv&category=tv&type=%s&limit=%d&start=%d" % (TV_TYPE.get(region, "tv"), size, start)
+    if kind == "show":
+        return "/api/douban/categories?kind=tv&category=show&type=%s&limit=%d&start=%d" % (SHOW_TYPE.get(region, "show"), size, start)
+    if tag == "剧场版":
+        return "/api/douban/recommends?kind=movie&limit=%d&start=%d&category=%s&format=&region=all&year=all&platform=all&sort=T&label=all" % (size, start, q("动画"))
+    return "/api/douban/recommends?kind=tv&limit=%d&start=%d&category=%s&format=%s&region=all&year=all&platform=all&sort=T&label=all" % (size, start, q("动画"), q("电视剧"))
 
 
 def douban_list(kind, tag, region, start, size):
     tag = tag or FILTERS[kind]["cats"][0]
-    region = region or "全部"
+    region = region or (FILTERS[kind]["regions"][0] if FILTERS[kind]["regions"] else "")
 
     def fetch():
-        if kind == "movie":
-            path = "/api/douban/categories?kind=movie&category=%s&type=%s&limit=%d&start=%d" % (q(tag), q(region), size, start)
-        else:
-            path = "/api/douban/categories?kind=tv&category=%s&type=%s&limit=%d&start=%d" % (q("最近热门"), q(TV_TYPE.get(tag, tag)), size, start)
-        res = UP.call(path)
+        res = UP.call(upstream_list_path(kind, tag, region, start, size))
         return slim_douban((res or {}).get("list"))
     return mem_cached("douban:%s:%s:%s:%d:%d" % (kind, tag, region, start, size), LIST_TTL, fetch)
 
@@ -327,9 +347,9 @@ def build_titles():
             add(q_, 3)
     except Exception as e:  # noqa: BLE001
         log("titles: history failed %r" % (e,))
-    for kind, tag, region in (("movie", "热门", "全部"), ("movie", "最新", "全部"), ("tv", "全部", None),
-                              ("tv", "国产剧", None), ("tv", "欧美剧", None), ("tv", "韩剧", None), ("tv", "日剧", None),
-                              ("anime", "动画", None), ("show", "综艺", None)):
+    for kind, tag, region in (("movie", "热门电影", "全部"), ("movie", "最新电影", "全部"), ("tv", "最近热门", "全部"),
+                              ("tv", "最近热门", "国产"), ("tv", "最近热门", "欧美"), ("tv", "最近热门", "韩国"), ("tv", "最近热门", "日本"),
+                              ("anime", "番剧", None), ("show", "最近热门", "全部")):
         for start in (0, 24, 48):
             try:
                 for it in douban_list(kind, tag, region, start, 24):
@@ -753,10 +773,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._json({
                     "user": up.username,
                     "continue": continue_watching(up),
-                    "movie": douban_list("movie", "热门", "全部", 0, 20),
-                    "tv": douban_list("tv", "全部", None, 0, 20),
-                    "anime": douban_list("anime", "动画", None, 0, 20),
-                    "show": douban_list("show", "综艺", None, 0, 20),
+                    "movie": douban_list("movie", "热门电影", "全部", 0, 20),
+                    "tv": douban_list("tv", "最近热门", "全部", 0, 20),
+                    "anime": douban_list("anime", "番剧", None, 0, 20),
+                    "show": douban_list("show", "最近热门", "全部", 0, 20),
                 })
             if p == "/filters":
                 return self._json(FILTERS, cache=3600)

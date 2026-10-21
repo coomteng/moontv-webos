@@ -31,8 +31,9 @@
     var s = st();
     if (!s.tag && f.cats && f.cats.length) s.tag = f.cats[0];
     if (!s.region && f.regions && f.regions.length) s.region = f.regions[0];
+    /* row labels follow MoonTV's web UI: movie 分类/地区, tv 分类/类型, show 分类/地区, anime 分类 */
     addChipRow('cats', '分类', f.cats || [], s.tag);
-    if (f.regions && f.regions.length) addChipRow('regions', '地区', f.regions, s.region);
+    if (f.regions && f.regions.length) addChipRow('regions', type === 'tv' ? '类型' : '地区', f.regions, s.region);
     UI.toggleClass(UI.$('browse-head'), 'no-filters', chipRows.length === 0 || (chipRows.length === 1 && chipRows[0].chips.length <= 1));
     /* grid starts right under the filter block (its height depends on the number of chip rows) */
     var head = UI.$('browse-head');
@@ -166,7 +167,7 @@
     if (filters) return Promise.resolve(filters);
     return API.filters().then(function (f) { filters = f || {}; return filters; }, function (err) {
       App.errorToast(err, '筛选项加载失败');
-      filters = { movie: { cats: ['热门'], regions: ['全部'] }, tv: { cats: ['全部'], regions: [] }, anime: { cats: ['动画'], regions: [] }, show: { cats: ['综艺'], regions: [] } };
+      filters = { movie: { cats: ['热门电影'], regions: ['全部'] }, tv: { cats: ['最近热门'], regions: ['全部'] }, anime: { cats: ['番剧', '剧场版'], regions: [] }, show: { cats: ['最近热门'], regions: ['全部'] } };
       return filters;
     });
   }

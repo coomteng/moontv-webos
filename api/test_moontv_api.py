@@ -79,6 +79,9 @@ class FakeMoonTV(http.server.BaseHTTPRequestHandler):
             FakeMoonTV.lists += 1
             return self._json({"code": 200, "list": [{"id": "1", "title": "%s/%s/%s" % (q.get("kind"), q.get("category"), q.get("type")),
                                                       "poster": "http://p/1.jpg", "rate": "8.1", "year": "2026"}]})
+        if u.path == "/api/douban/recommends":
+            FakeMoonTV.lists += 1
+            return self._json({"code": 200, "list": [{"id": "3", "title": "rec:%s/%s/%s" % (q.get("kind"), q.get("category"), q.get("format", "")), "poster": "http://p/3.jpg", "rate": "", "year": ""}]})
         if u.path == "/api/playrecords":
             return self._json({"src+1": {"title": user + " 看的剧", "cover": "http://p/c.jpg", "index": 3, "total_episodes": 10,
                                          "play_time": 100, "total_time": 2000, "save_time": 2, "year": "2025"},
@@ -220,14 +223,25 @@ class BridgeTest(unittest.TestCase):
     def test_list_filters_validation(self):
         st, _, _ = self.js("/list?type=bogus")
         self.assertEqual(st, 400)
-        _, _, items = self.js("/list?type=movie&tag=%s&region=%s&size=5" % (urllib.parse.quote("豆瓣高分"), urllib.parse.quote("日本")))
-        self.assertEqual(items[0]["title"], "movie/豆瓣高分/日本")
-        _, _, items = self.js("/list?type=tv&tag=" + urllib.parse.quote("韩剧"))
-        self.assertEqual(items[0]["title"], "tv/最近热门/韩剧")
-        _, _, items = self.js("/list?type=anime")
-        self.assertEqual(items[0]["title"], "tv/最近热门/动画")
+        cases = {  # every chip maps to exactly the request MoonTV's web UI makes
+            "/list?type=movie": "movie/热门/全部",
+            "/list?type=movie&tag=最新电影&region=韩国": "movie/最新/韩国",
+            "/list?type=tv": "tv/tv/tv",
+            "/list?type=tv&region=韩国": "tv/tv/tv_korean",
+            "/list?type=tv&region=动漫": "tv/tv/tv_animation",
+            "/list?type=show": "tv/show/show",
+            "/list?type=show&region=国内": "tv/show/show_domestic",
+            "/list?type=anime": "rec:tv/动画/电视剧",
+            "/list?type=anime&tag=剧场版": "rec:movie/动画/",
+        }
+        for path, want in cases.items():
+            _, _, items = self.js(urllib.parse.quote(path, safe="/?=&"))
+            self.assertEqual(items[0]["title"], want, path)
+        home = self.js("/home")[2]
+        self.assertNotEqual(home["anime"][0]["title"], home["show"][0]["title"])
         st, h, f = self.js("/filters")
-        self.assertEqual((f["movie"]["cats"][0], len(f["movie"]["regions"]), f["anime"]["cats"][0]), ("热门", 5, "动画"))
+        self.assertEqual((f["movie"]["cats"][0], f["tv"]["regions"][1], f["anime"]["cats"], f["show"]["regions"]),
+                         ("热门电影", "国产", ["番剧", "剧场版"], ["全部", "国内", "国外"]))
         self.assertEqual(list(f.keys()), ["movie", "tv", "anime", "show"])
         self.assertEqual(h["Cache-Control"], "public, max-age=3600")
 
