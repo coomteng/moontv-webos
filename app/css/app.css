@@ -59,6 +59,8 @@ img { -webkit-user-drag: none; }
 .card .badge.rate { background: #ec4899; color: #fff; font-weight: bold; }
 .card .badge.eps { background: #22c55e; color: #fff; }
 .card .badge.year { right: auto; left: 8px; background: rgba(0,0,0,0.7); color: #fff; }
+.card .badge.day { right: auto; left: 8px; background: rgba(0,0,0,0.7); color: #fff; }        /* 新番放送 weekday */
+.card-fav .badge.eps { background: rgba(0,0,0,0.7); color: #fad778; }                           /* 我的收藏 episode count */
 .card .progress { position: absolute; left: 0; right: 0; top: 304px; height: 8px; background: rgba(0,0,0,0.6); }
 .card .progress .bar { height: 100%; background: #22c55e; }
 .card .sub.source { color: #9aa0b4; }
@@ -80,6 +82,11 @@ img { -webkit-user-drag: none; }
 #browse-head.no-filters #browse-filters { display: none; }
 .filter-row { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; }
 .filter-label { -webkit-flex: none; flex: none; width: 90px; font-size: 26px; color: #8f94a3; line-height: 52px; }
+/* 全部 (advanced) rows: one non-wrapping strip per group, translated so the focused chip stays visible */
+.chips-wrap { -webkit-flex: 1; flex: 1; min-width: 0; overflow: hidden; position: relative; }
+.chips.strip { position: relative; -webkit-flex-wrap: nowrap; flex-wrap: nowrap; white-space: nowrap;
+               -webkit-transition: -webkit-transform 0.2s ease-out; transition: transform 0.2s ease-out; }
+.chips.strip .chip { -webkit-flex: none; flex: none; }
 #browse-scroll { position: absolute; top: 330px; left: 0; right: 0; bottom: 0; overflow: hidden; }
 #browse-head.no-filters + #browse-scroll { top: 190px; }
 #browse-empty { position: absolute; top: 20px; left: 0; }
@@ -133,6 +140,9 @@ img { -webkit-user-drag: none; }
 #detail-actions .btn.reprobe { color: #b8bcc8; border-color: rgba(255,255,255,0.22); }
 #detail-actions .btn.reprobe.focus { color: #fff; border-color: #fad778; }
 #detail-actions .btn.reprobe.busy { opacity: 0.6; }
+#detail-actions .btn.fav { color: #b8bcc8; border-color: rgba(255,255,255,0.22); }
+#detail-actions .btn.fav.on { color: #fad778; border-color: rgba(250,215,120,0.5); }
+#detail-actions .btn.fav.focus { color: #fff; border-color: #fad778; }
 .section-title { font-size: 28px; color: #d6d9e2; margin: 6px 0 10px; }
 #detail-sources-wrap { max-height: 136px; overflow: hidden; margin-bottom: 6px; }
 #detail-sources { position: relative; -webkit-transition: -webkit-transform 0.2s; transition: transform 0.2s; }
@@ -160,6 +170,7 @@ img { -webkit-user-drag: none; }
 #osd-bar .buf { position: absolute; left: 0; top: 0; height: 100%; background: rgba(255,255,255,0.35); border-radius: 5px; }
 #osd-bar .pos { position: absolute; left: 0; top: 0; height: 100%; background: #fad778; border-radius: 5px; }
 #osd-hint { position: absolute; top: 150px; left: 80px; font-size: 22px; color: #8f94a3; }
+#osd-hint-skip { position: absolute; top: 150px; right: 80px; font-size: 22px; color: #8f94a3; }
 #osd-state { position: absolute; top: 440px; left: 0; right: 0; text-align: center; font-size: 56px; line-height: 80px; color: #fff;
              text-shadow: 0 2px 20px #000; white-space: pre-line; display: none; }
 #osd-state.show { display: block; }

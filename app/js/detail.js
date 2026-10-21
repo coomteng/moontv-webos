@@ -14,9 +14,10 @@
   var probing = false;
   var userPicked = false; /* user chose a source explicitly: don't auto-switch after probe */
   var probeSeq = 0;
-  var actionIndex = 0;
+  var actionIndex = 0;    /* focused button in the actions row (继续观看 / 收藏 / 重新测速), kept across re-renders */
   var expanding = false;  /* background search to add the other sources (single-source entry) */
-  var expandSeq = 0;    /* focused button in the actions row (继续观看 / 重新测速), kept across re-renders */
+  var expandSeq = 0;
+  var favBusy = false;    /* a 收藏 request is in flight */
 
   function $(id) { return UI.$(id); }
 
@@ -103,6 +104,7 @@
           epIndex = Math.min(epIndex, episodeCount(cur) - 1);
           renderInfo();
           renderEpisodes();
+          renderActions();
         }
       }
       renderSources();
@@ -202,6 +204,12 @@
       b.setAttribute('data-action', 'resume');
       box.appendChild(b);
     }
+    if (cur) {
+      var fav = UI.text('div', 'btn fav', isFav() ? '已收藏' : '收藏');
+      fav.setAttribute('data-action', 'fav');
+      if (isFav()) UI.addClass(fav, 'on');
+      box.appendChild(fav);
+    }
     if (anyPlayable()) {
       var r = UI.text('div', 'btn reprobe', probing ? '测速中…' : (expanding ? '查找其它源…' : '重新测速'));
       r.setAttribute('data-action', 'reprobe');
@@ -214,6 +222,49 @@
     var a = el && el.getAttribute('data-action');
     if (a === 'resume') resume();
     else if (a === 'reprobe') reprobe();
+    else if (a === 'fav') toggleFav();
+  }
+
+  /* ---- favourites (web: 收藏 / 已收藏 on the play page; key = source+id of the current source) ---- */
+  function favKey() { return cur ? cur.source + '+' + cur.id : ''; }
+  function isFav() { return !!(cur && App.Favorites.has(favKey())); }
+
+  function toggleFav() {
+    if (!cur) return;
+    if (favBusy) return;
+    var key = favKey();
+    var zoneNow = App.zoneName ? App.zoneName() : null;
+    var done = function () {
+      favBusy = false;
+      renderActions();
+      if (zoneNow === 'actions') zones('actions');
+    };
+    favBusy = true;
+    if (isFav()) {
+      API.removeFavorite(key).then(function () {
+        App.Favorites.remove(key);
+        UI.toast('已取消收藏');
+        done();
+      }, function (err) { done(); App.errorToast(err, '取消收藏失败'); });
+    } else {
+      var fav = {
+        title: cur.title || title,
+        cover: cur.poster || '',
+        source_name: cur.source_name || cur.source,
+        year: cur.year || '',
+        total_episodes: episodeCount(cur) || 1,
+        save_time: new Date().getTime(),
+        search_title: query || title
+      };
+      API.addFavorite(key, fav).then(function () {
+        App.Favorites.put({
+          key: key, source: cur.source, id: cur.id, title: fav.title, poster: fav.cover, year: fav.year,
+          source_name: fav.source_name, total_episodes: fav.total_episodes, save_time: fav.save_time, search_title: fav.search_title
+        });
+        UI.toast('已收藏');
+        done();
+      }, function (err) { done(); App.errorToast(err, '收藏失败'); });
+    }
   }
 
   function renderSources() {
@@ -325,6 +376,7 @@
     cur = s;
     epIndex = Math.min(epIndex, episodeCount(cur) - 1);
     renderInfo();
+    renderActions();
     renderSources();
     renderEpisodes();
     zones('sources');
@@ -342,7 +394,7 @@
     for (var i = 0; i < sources.length; i++) {
       if (sources[i].source === record.source && episodeCount(sources[i])) { same = sources[i]; break; }
     }
-    if (same && same !== cur) { cur = same; renderInfo(); renderSources(); renderEpisodes(); }
+    if (same && same !== cur) { cur = same; renderInfo(); renderActions(); renderSources(); renderEpisodes(); }
     var idx = Math.max(0, Math.min((record.index || 1) - 1, episodeCount(cur) - 1));
     play(idx, record.play_time || 0);
   }
@@ -364,6 +416,7 @@
         userPicked = false;
         probes = {};
         actionIndex = 0;
+        favBusy = false;
         if (record && cur && record.source === cur.source && record.index) epIndex = Math.min(record.index - 1, episodeCount(cur) - 1);
       } else {
         /* back from the player: refresh the record / 当前 marker */
@@ -383,9 +436,10 @@
       if (sources.length === 1) expandSources();
     },
     leave: function () { probeSeq++; probing = false; expandSeq++; expanding = false; },
-    /* Yellow key: re-run the probe (e.g. after a source started stuttering) */
+    /* Yellow key: re-run the probe (e.g. after a source started stuttering); green key: 收藏 toggle */
     key: function (code) {
       if (code === 405) { reprobe(); return true; }
+      if (code === 404) { toggleFav(); return true; }
       return false;
     }
   });

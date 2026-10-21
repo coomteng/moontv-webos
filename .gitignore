@@ -7,3 +7,4 @@ __pycache__/
 TODO.md
 SPEC.md
 local.env
+test/shots-features/*.png

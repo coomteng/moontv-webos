@@ -273,6 +273,7 @@ var Accounts = (function () {
 
   function enterApp(u) {
     App.setUser(u);
+    App.Favorites.load();
     App.Records.load().then(function () { App.goRoot('home', {}); }, function () { App.goRoot('home', {}); });
   }
 

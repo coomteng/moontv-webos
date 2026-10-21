@@ -1,21 +1,26 @@
-/* home.js — home view: 继续观看 + four douban rows, horizontal strips (ES5 only). */
+/* home.js — home view: 继续观看 / 我的收藏 / douban rows / 新番放送, horizontal strips (ES5 only). */
 (function () {
   'use strict';
 
+  /* /home key order == render order */
   var ROWS = [
     { key: 'continue', title: '继续观看', kind: 'record' },
+    { key: 'favorites', title: '我的收藏', kind: 'fav' },
     { key: 'movie', title: '热门电影', kind: 'douban' },
     { key: 'tv', title: '热门剧集', kind: 'douban' },
+    { key: 'bangumi', title: '新番放送', kind: 'bangumi' },
     { key: 'anime', title: '热门动漫', kind: 'douban' },
     { key: 'show', title: '热门综艺', kind: 'douban' }
   ];
   var VIEW_H = 970;   /* 1080 - topbar 110 */
+  var CLEAR_CONFIRM_MS = 5000;
 
   var data = null;
   var rowEls = {};    /* key -> { row, cards, zone } */
   var zones = [];
   var loaded = false;
   var loadingNow = false;
+  var clearArmed = 0; /* timestamp of the first RED press on 继续观看 (two-press confirmation) */
 
   function rowsNode() { return UI.$('home-rows'); }
 
@@ -37,21 +42,26 @@
       onEnter: function (el, i) {
         var item = items[i];
         if (!item) return;
-        if (def.kind === 'record') openRecord(item);
+        if (def.kind === 'record' || def.kind === 'fav') openRecord(item);
         else openDouban(item);
       }
     };
   }
 
+  function buildCard(kind, item) {
+    if (kind === 'record') return Cards.record(item);
+    if (kind === 'fav') return Cards.fav(item);
+    if (kind === 'bangumi') return Cards.bangumi(item);
+    return Cards.douban(item);
+  }
+
   function buildRow(def, items) {
     var row = UI.el('div', 'row');
     var title = UI.text('div', 'row-title', def.title);
-    if (def.kind === 'record') title.appendChild(UI.text('span', 'hint', '按确认键继续播放'));
+    if (def.kind === 'record') title.appendChild(UI.text('span', 'hint', '按确认键继续播放 · 红键 清空'));
     row.appendChild(title);
     var cards = UI.el('div', 'cards');
-    for (var i = 0; i < items.length; i++) {
-      cards.appendChild(def.kind === 'record' ? Cards.record(items[i]) : Cards.douban(items[i]));
-    }
+    for (var i = 0; i < items.length; i++) cards.appendChild(buildCard(def.kind, items[i]));
     row.appendChild(cards);
     UI.translate(cards, 0, 0);
     return { row: row, cards: cards, zone: makeZone(def, row, cards, items) };
@@ -86,12 +96,33 @@
     App.setZones(zones, startZone);
   }
 
-  /* Re-render only the 继续观看 row from the local record cache (after playback). */
+  /* Re-render the 继续观看 / 我的收藏 rows from the local caches (after playback / detail page). */
   function refreshContinue() {
     if (!data) return;
-    var recs = App.Records.list.slice(0, 20);
-    data['continue'] = recs;
+    data['continue'] = App.Records.list.slice(0, 20);
+    data['favorites'] = App.Favorites.list.slice(0, 20);
     render();
+  }
+
+  /* RED on the 继续观看 row: first press arms, second press within 5 s clears all records (web: 清空). */
+  function clearContinue() {
+    var now = new Date().getTime();
+    if (!clearArmed || now - clearArmed > CLEAR_CONFIRM_MS) {
+      clearArmed = now;
+      UI.toast('再按红键清空继续观看', CLEAR_CONFIRM_MS);
+      return;
+    }
+    clearArmed = 0;
+    UI.loading(true);
+    API.clearRecords().then(function () {
+      UI.loading(false);
+      App.Records.set([]);
+      UI.toast('已清空继续观看');
+      if (App.currentName() === 'home') refreshContinue();
+    }, function (err) {
+      UI.loading(false);
+      App.errorToast(err, '清空失败');
+    });
   }
 
   function load() {
@@ -104,6 +135,7 @@
       data = d || {};
       loaded = true;
       if (data['continue'] && data['continue'].length) App.Records.set(data['continue'].slice());
+      if (data['favorites']) App.Favorites.set(data['favorites'].slice());
       render();
     }, function (err) {
       UI.loading(false);
@@ -121,7 +153,8 @@
     App.go('search', { q: item.title, auto: true, autoOpen: true });
   }
 
-  /* Record card: fetch episodes, fall back to search, then resume in the player. */
+  /* Record / favourite card: fetch episodes, fall back to search, then resume in the player
+     (a favourite has no index/play_time: it opens the detail page only). */
   function openRecord(rec) {
     UI.loading(true);
     var done = function (result) {
@@ -132,7 +165,7 @@
       }
       var idx = Math.max(0, Math.min((rec.index || 1) - 1, result.episodes.length - 1));
       App.go('detail', { result: result, group: null, query: rec.search_title || rec.title });
-      App.go('player', { result: result, index: idx, startTime: rec.play_time || 0, query: rec.search_title || rec.title });
+      if (rec.index) App.go('player', { result: result, index: idx, startTime: rec.play_time || 0, query: rec.search_title || rec.title });
     };
     var fail = function (err) {
       UI.loading(false);
@@ -161,6 +194,7 @@
     data = null;
     loaded = false;
     loadingNow = false;
+    clearArmed = 0;
     UI.empty(UI.$('home-rows'));
   }
 
@@ -168,10 +202,13 @@
     reset: reset,
     enter: function (params, isBack) {
       if (!loaded) { load(); return; }
-      if (isBack) refreshContinue();
-      else App.setZones(zones, 0);
+      /* 继续观看 / 我的收藏 may have changed in the player / detail page: re-render from the caches */
+      refreshContinue();
     },
-    leave: function () {},
-    key: function () { return false; }
+    leave: function () { clearArmed = 0; },
+    key: function (code) {
+      if (code === 403 && App.zoneName() === 'row-continue') { clearContinue(); return true; }   /* red = 清空 */
+      return false;
+    }
   });
 })();

@@ -28,6 +28,8 @@ This project is a separate TV interface for the same MoonTV. It installs as its 
 |---|---|
 | ![TV keyboard with QR](docs/screenshots/04-phone-qr.jpg) | <img src="docs/screenshots/05-phone-input.jpg" width="260" alt="Phone input page"> |
 
+**Browse like the web.** Each category page has the same filters as MoonTV's web UI, including the 全部 tab with sort (综合 / 近期热度 / 首映时间 / 高分优先), genre, region, year and platform. Favourites, skip-intro/outro settings and play history are shared with the web UI.
+
 **Several people, separate accounts.** Each person logs in with their MoonTV account once and the TV remembers it. Next time the TV starts straight into whoever used it last. To switch, select the user name in the top bar to log out; a picker with one tile per account appears, and selecting a tile logs in without a password.
 
 **Try it without a TV.** Open `http://<bridge>:8788/` in a desktop browser and you get a scaled-down "TV" running the exact same app, with a clickable remote drawn next to it. Handy when changing things.

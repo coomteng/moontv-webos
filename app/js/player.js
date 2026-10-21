@@ -17,6 +17,12 @@
   var seekHold = { timer: null, dir: 0 };
   var osdFocus = false;    /* true while focus is in the episode strip */
   var lastSaved = { time: -1, index: -1 };
+  /* 跳过片头片尾 (web: ArtPlayer settings, stored per source+id in /skip as seconds) */
+  var skip = { enable: false, intro_time: 0, outro_time: 0 };
+  var skipSeq = 0;
+  var introDone = false;   /* intro seek applied for the current episode */
+  var outroDone = false;   /* outro auto-next fired for the current episode */
+  var skipSaving = false;
 
   function $(id) { return UI.$(id); }
 
@@ -141,12 +147,91 @@
   }
   function stopSaveTimer() { if (saveTimer) { clearInterval(saveTimer); saveTimer = null; } }
 
+  /* ---- skip intro / outro ---- */
+  function skipKey() { return result ? result.source + '+' + result.id : ''; }
+
+  function loadSkip() {
+    var seq = ++skipSeq;
+    skip = { enable: false, intro_time: 0, outro_time: 0 };
+    API.skipConfig(skipKey()).then(function (cfg) {
+      if (seq !== skipSeq || !active) return;
+      cfg = cfg || {};
+      skip = { enable: !!cfg.enable, intro_time: Number(cfg.intro_time) || 0, outro_time: Number(cfg.outro_time) || 0 };
+      /* config arrived after loadedmetadata: apply the intro skip now if still at the start */
+      maybeSkipIntro();
+    }, function () { /* non-fatal: no skipping */ });
+  }
+
+  function maybeSkipIntro() {
+    if (introDone || !active || !video) return;
+    if (!skip.enable || !(skip.intro_time > 0)) return;
+    if (!video.duration || !isFinite(video.duration) || video.readyState < 1) return;
+    if (pendingSeek > 0) { introDone = true; return; }       /* resuming: never jump */
+    /* only at the very start of the episode (the config may arrive a moment after loadedmetadata) */
+    if ((video.currentTime || 0) > 5 || skip.intro_time >= video.duration - 5) { introDone = true; return; }
+    introDone = true;
+    try { video.currentTime = skip.intro_time; } catch (e) { /* ignore */ }
+    UI.toast('已跳过片头');
+    updateTime();
+  }
+
+  function maybeSkipOutro() {
+    if (outroDone || !skip.enable || !(skip.outro_time > 0)) return;
+    var dur = video.duration;
+    if (!dur || !isFinite(dur)) return;
+    if ((video.currentTime || 0) >= dur - skip.outro_time) {
+      outroDone = true;
+      UI.toast('已跳过片尾');
+      nextEpisode();
+    }
+  }
+
+  function saveSkip(cfg) {
+    if (skipSaving) { UI.toast('正在保存…'); return; }
+    var key = skipKey();
+    if (!key) return;
+    var next = { enable: !!(cfg.intro_time > 0 || cfg.outro_time > 0), intro_time: cfg.intro_time, outro_time: cfg.outro_time };
+    skipSaving = true;
+    API.saveSkipConfig(key, next).then(function () {
+      skipSaving = false;
+      skip = next;
+      var parts = [];
+      if (next.intro_time > 0) parts.push('片头 ' + UI.fmtTime(next.intro_time));
+      if (next.outro_time > 0) parts.push('片尾前 ' + UI.fmtTime(next.outro_time));
+      UI.toast(next.enable ? '已保存：' + parts.join('，') : '已关闭跳过片头片尾');
+    }, function (err) {
+      skipSaving = false;
+      App.errorToast(err, '保存失败');
+    });
+  }
+
+  /* YELLOW: 设置片头 = current position is where the intro ends */
+  function setIntroHere() {
+    var t = Math.floor(video.currentTime || 0);
+    if (t === skip.intro_time && skip.enable) return;
+    saveSkip({ intro_time: t, outro_time: skip.outro_time });
+    showOsd(false);
+  }
+
+  /* BLUE: 设置片尾 = seconds before the end from the current position */
+  function setOutroHere() {
+    var dur = video.duration;
+    if (!dur || !isFinite(dur)) { UI.toast('时长未知，无法设置片尾'); return; }
+    var t = Math.floor(dur - (video.currentTime || 0));
+    if (t < 0) t = 0;
+    outroDone = true;      /* we are at the new outro point: do not cut this episode short right away */
+    saveSkip({ intro_time: skip.intro_time, outro_time: t });
+    showOsd(false);
+  }
+
   /* ---- playback ---- */
   function loadEpisode(i, startTime) {
     if (!result.episodes[i]) return;
     if (i !== index && video.currentTime > 3) saveRecord(true);
     index = i;
     pendingSeek = startTime || 0;
+    introDone = false;
+    outroDone = false;
     lastSaved = { time: -1, index: -1 };
     renderTitle();
     markCurrentEp();
@@ -199,9 +284,11 @@
     video.addEventListener('loadedmetadata', function () {
       if (pendingSeek > 0 && pendingSeek < (video.duration || 1e9) - 5) {
         try { video.currentTime = pendingSeek; } catch (e) { /* ignore */ }
+        introDone = true;              /* resuming a record: do not jump to the intro end */
       }
       pendingSeek = 0;
       updateTime();
+      maybeSkipIntro();
     }, false);
     video.addEventListener('playing', function () { setState(''); startSaveTimer(); }, false);
     video.addEventListener('waiting', function () { setState('缓冲中…'); }, false);
@@ -210,7 +297,7 @@
       if (!video.ended) { setState('已暂停'); showOsd(true); saveRecord(true); }
     }, false);
     video.addEventListener('play', function () { setState(''); showOsd(false); }, false);
-    video.addEventListener('timeupdate', function () { if (active) updateTime(); }, false);
+    video.addEventListener('timeupdate', function () { if (active) { updateTime(); maybeSkipOutro(); } }, false);
     video.addEventListener('ended', function () { if (active) nextEpisode(); }, false);
     video.addEventListener('error', function () {
       if (!active) return;
@@ -254,6 +341,8 @@
       case 413: video.pause(); saveRecord(true); App.back(); return true; /* Stop */
       case 417: seekBy(60); return true;                               /* FF */
       case 412: seekBy(-60); return true;                              /* RW */
+      case 405: setIntroHere(); return true;                           /* Yellow: 设为片头结束点 */
+      case 406: setOutroHere(); return true;                           /* Blue: 设为片尾开始点 */
       case 461: case 27: App.back(); return true;
     }
     return false;
@@ -274,10 +363,13 @@
       renderTitle();
       renderEps();
       zones();
+      loadSkip();
       loadEpisode(index, params.startTime || 0);
     },
     leave: function () {
       active = false;
+      skipSeq++;
+      skipSaving = false;
       stopSeekHold();
       stopSaveTimer();
       if (video) {

@@ -43,6 +43,37 @@ var App = (function () {
     }
   };
 
+  /* ------------------------------------------------------------ favourites cache (我的收藏) */
+  var Favorites = {
+    list: [],
+    byKey: {},
+    load: function () {
+      return API.favorites().then(function (favs) {
+        Favorites.set(favs || []);
+        return Favorites.list;
+      }, function () { return Favorites.list; });
+    },
+    set: function (favs) {
+      Favorites.list = favs;
+      Favorites.byKey = {};
+      for (var i = 0; i < favs.length; i++) Favorites.byKey[favs[i].key] = favs[i];
+    },
+    has: function (key) { return !!Favorites.byKey[key]; },
+    findByKey: function (key) { return Favorites.byKey[key] || null; },
+    /* Local update after POST /favorites: newest first, same card fields as /home "favorites". */
+    put: function (fav) {
+      Favorites.remove(fav.key);
+      Favorites.list.unshift(fav);
+      Favorites.byKey[fav.key] = fav;
+    },
+    remove: function (key) {
+      for (var i = 0; i < Favorites.list.length; i++) {
+        if (Favorites.list[i].key === key) { Favorites.list.splice(i, 1); break; }
+      }
+      delete Favorites.byKey[key];
+    }
+  };
+
   /* ------------------------------------------------------------ top bar */
   function buildTabs() {
     tabEls = UI.toArray(document.querySelectorAll('#topbar .tab'));
@@ -68,6 +99,7 @@ var App = (function () {
     Accounts.logout().then(function () {
       setUser('');
       Records.set([]);
+      Favorites.set([]);
       stack = [];
       activate({ name: 'login', params: {} }, false);
     });
@@ -98,6 +130,7 @@ var App = (function () {
     if (changed) {
       /* per-user state must not leak across accounts */
       Records.set([]);
+      Favorites.set([]);
       for (var n in views) if (views.hasOwnProperty(n) && views[n].reset) views[n].reset();
     }
     var el = UI.$('tab-user');
@@ -203,6 +236,7 @@ var App = (function () {
       if (u) {
         setUser(u);
         Records.load();
+        Favorites.load();
         goRoot('home', {});
       } else {
         setUser('');
@@ -220,7 +254,7 @@ var App = (function () {
 
   return {
     register: register, go: go, goRoot: goRoot, back: back, setZones: setZones, focusTabs: focusTabs,
-    currentName: currentName, zoneName: zoneName, errorToast: errorToast, setUser: setUser, getUser: getUser, Records: Records, init: init,
+    currentName: currentName, zoneName: zoneName, errorToast: errorToast, setUser: setUser, getUser: getUser, Records: Records, Favorites: Favorites, init: init,
     stackNames: function () { var n = []; for (var i = 0; i < stack.length; i++) n.push(stack[i].name); return n; }
   };
 })();
