@@ -13,9 +13,15 @@ import (
 
 // fakeMoonTV is a minimal stand-in for MoonTV's API: cookie login, 401 without it,
 // douban categories, playrecords (per user), search, searchhistory, image-proxy.
-func fakeMoonTV(t *testing.T) (*httptest.Server, *struct{ logins, lists int }) {
+type counters struct {
+	logins, lists  int
+	lastMethodPath string
+	lastBody       map[string]interface{}
+}
+
+func fakeMoonTV(t *testing.T) (*httptest.Server, *counters) {
 	t.Helper()
-	counters := &struct{ logins, lists int }{}
+	counters := &counters{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/login", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]string
@@ -50,9 +56,42 @@ func fakeMoonTV(t *testing.T) (*httptest.Server, *struct{ logins, lists int }) {
 		q := r.URL.Query()
 		w.Write([]byte(`{"code":200,"list":[{"id":"3","title":"rec:` + q.Get("kind") + "/" + q.Get("category") + "/" + q.Get("format") + `","poster":"http://p/3.jpg","rate":"","year":""}]}`))
 	}))
+	mux.HandleFunc("/api/favorites", auth(func(w http.ResponseWriter, r *http.Request) {
+		c, _ := r.Cookie("auth")
+		counters.lastMethodPath = r.Method + " " + r.URL.RequestURI()
+		if r.Method != "GET" {
+			if r.Method == "POST" {
+				var b map[string]interface{}
+				json.NewDecoder(r.Body).Decode(&b)
+				counters.lastBody = b
+			}
+			w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		user := strings.TrimPrefix(c.Value, "tok-")
+		w.Write([]byte(`{"a+1":{"title":"` + user + ` 收藏","cover":"http://p/f.jpg","save_time":5,"total_episodes":12},"b+2":{"title":"旧收藏","save_time":1}}`))
+	}))
+	mux.HandleFunc("/api/skipconfigs", auth(func(w http.ResponseWriter, r *http.Request) {
+		counters.lastMethodPath = r.Method + " " + r.URL.RequestURI()
+		if r.Method != "GET" {
+			if r.Method == "POST" {
+				var b map[string]interface{}
+				json.NewDecoder(r.Body).Decode(&b)
+				counters.lastBody = b
+			}
+			w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		w.Write([]byte(`{"ruyi+86003":{"enable":true,"intro_time":90,"outro_time":120}}`))
+	}))
+	mux.HandleFunc("/api/bangumi/calendar", auth(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`[{"weekday":{"cn":"星期一","id":1},"items":[{"id":1,"name":"jp","name_cn":"周一番","air_date":"2026-04-06","rating":{"score":7.5},"images":{"large":"http://b/1.jpg"}}]},
+		                 {"weekday":{"cn":"星期日","id":7},"items":[{"id":7,"name":"sun","name_cn":"","air_date":"2026-01-01","rating":{"score":0},"images":{"large":"http://b/7.jpg"}}]}]`))
+	}))
 	mux.HandleFunc("/api/playrecords", auth(func(w http.ResponseWriter, r *http.Request) {
 		c, _ := r.Cookie("auth")
-		if r.Method == "POST" {
+		counters.lastMethodPath = r.Method + " " + r.URL.RequestURI()
+		if r.Method == "POST" || r.Method == "DELETE" {
 			w.Write([]byte(`{"ok":true}`))
 			return
 		}
@@ -83,7 +122,7 @@ func fakeMoonTV(t *testing.T) (*httptest.Server, *struct{ logins, lists int }) {
 	return srv, counters
 }
 
-func testApp(t *testing.T) (*App, *httptest.Server, *struct{ logins, lists int }) {
+func testApp(t *testing.T) (*App, *httptest.Server, *counters) {
 	t.Helper()
 	up, counters := fakeMoonTV(t)
 	dir := t.TempDir()
@@ -480,5 +519,186 @@ func TestUpstreamDownMapsTo502Or500(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"error"`) {
 		t.Fatalf("error body: %s", b)
+	}
+}
+
+func del(t *testing.T, url string, hdr map[string]string) (int, []byte) {
+	t.Helper()
+	req, _ := http.NewRequest("DELETE", url, nil)
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var sb strings.Builder
+	b := make([]byte, 1<<16)
+	for {
+		n, err := resp.Body.Read(b)
+		sb.Write(b[:n])
+		if err != nil {
+			break
+		}
+	}
+	return resp.StatusCode, []byte(sb.String())
+}
+
+func TestAdvancedFiltersMirrorWeb(t *testing.T) {
+	_, srv, _ := testApp(t)
+	st, _, _ := get(t, srv.URL+"/filters/advanced?type=anime", nil)
+	if st != 400 {
+		t.Fatalf("anime has no advanced filters on the web: %d", st)
+	}
+	_, _, b := get(t, srv.URL+"/filters/advanced?type=tv", nil)
+	var groups []advGroup
+	decode(t, b, &groups)
+	keys := []string{}
+	for _, g := range groups {
+		keys = append(keys, g.Key)
+	}
+	if strings.Join(keys, ",") != "sort,category,region,year,platform" {
+		t.Fatalf("tv groups: %v", keys)
+	}
+	_, _, b = get(t, srv.URL+"/filters/advanced?type=movie", nil)
+	decode(t, b, &groups)
+	if len(groups) != 4 || groups[0].Options[1] != "近期热度" {
+		t.Fatalf("movie groups: %s", b)
+	}
+	// request shape == what the web sends for the same dropdown choices
+	cases := map[string]string{
+		"/list/advanced?type=movie": "rec:movie/all/",
+		"/list/advanced?type=movie&sort=近期热度&category=喜剧&region=华语&year=2020年代": "rec:movie/喜剧/",
+		"/list/advanced?type=tv&platform=Netflix":                               "rec:tv/all/电视剧",
+		"/list/advanced?type=show&sort=高分优先":                                    "rec:tv/all/综艺",
+	}
+	var items []Item
+	for path, want := range cases {
+		_, _, b = get(t, srv.URL+path, nil)
+		decode(t, b, &items)
+		if len(items) == 0 || items[0].Title != want {
+			t.Errorf("%s -> %s want %s", path, b, want)
+		}
+	}
+	if got := advancedListPath("movie", map[string]string{"sort": "近期热度", "category": "喜剧", "region": "华语", "year": "2020年代"}, 0, 25); !strings.Contains(got, "sort=U") || !strings.Contains(got, "category="+q("喜剧")) || !strings.Contains(got, "year="+q("2020年代")) || !strings.Contains(got, "platform=all") {
+		t.Fatalf("recommends path: %s", got)
+	}
+	if got := advancedListPath("tv", map[string]string{"sort": "高分优先"}, 25, 25); !strings.Contains(got, "sort=S") || !strings.Contains(got, "format="+q("电视剧")) || !strings.Contains(got, "start=25") {
+		t.Fatalf("tv recommends path: %s", got)
+	}
+}
+
+func TestFavoritesCRUDPerUser(t *testing.T) {
+	_, srv, c := testApp(t)
+	_, b := post(t, srv.URL+"/login", `{"username":"moontv2","password":"moontv2"}`, nil)
+	var lg struct{ Session string }
+	decode(t, b, &lg)
+	hdr := map[string]string{"X-Session": lg.Session}
+
+	_, _, b = get(t, srv.URL+"/favorites", hdr)
+	var favs []Fav
+	decode(t, b, &favs)
+	if len(favs) != 2 || favs[0].Key != "a+1" || favs[0].Title != "moontv2 收藏" || favs[0].Source != "a" || favs[0].TotalEpisodes != float64(12) {
+		t.Fatalf("favorites: %s", b)
+	}
+	st, b := post(t, srv.URL+"/favorites", `{"key":"x+9","favorite":{"title":"T","cover":"c"}}`, hdr)
+	if st != 200 || c.lastBody["key"] != "x+9" || c.lastBody["favorite"].(map[string]interface{})["save_time"] == nil {
+		t.Fatalf("add favorite: %d %s body=%v", st, b, c.lastBody)
+	}
+	st, _ = del(t, srv.URL+"/favorites?key=x%2B9", hdr)
+	if st != 200 || c.lastMethodPath != "DELETE /api/favorites?key=x%2B9" {
+		t.Fatalf("delete favorite: %d %s", st, c.lastMethodPath)
+	}
+	st, _ = del(t, srv.URL+"/favorites", hdr)
+	if st != 200 || c.lastMethodPath != "DELETE /api/favorites" {
+		t.Fatalf("clear favorites: %d %s", st, c.lastMethodPath)
+	}
+	st, _ = post(t, srv.URL+"/favorites", `{"key":"x+9"}`, hdr)
+	if st != 400 {
+		t.Fatalf("validation: %d", st)
+	}
+	st, _, _ = get(t, srv.URL+"/favorites", map[string]string{"X-Session": "bad"})
+	if st != 401 {
+		t.Fatalf("bad session: %d", st)
+	}
+}
+
+func TestSkipConfigs(t *testing.T) {
+	_, srv, c := testApp(t)
+	_, _, b := get(t, srv.URL+"/skip?key=ruyi%2B86003", nil)
+	var cfg struct {
+		Enable bool    `json:"enable"`
+		Intro  float64 `json:"intro_time"`
+		Outro  float64 `json:"outro_time"`
+	}
+	decode(t, b, &cfg)
+	if !cfg.Enable || cfg.Intro != 90 || cfg.Outro != 120 {
+		t.Fatalf("skip get: %s", b)
+	}
+	_, _, b = get(t, srv.URL+"/skip?key=none%2B0", nil)
+	if string(b) != "{}" {
+		t.Fatalf("missing key should be {}: %s", b)
+	}
+	st, _ := post(t, srv.URL+"/skip", `{"key":"ruyi+86003","config":{"enable":true,"intro_time":95,"outro_time":0}}`, nil)
+	if st != 200 || c.lastBody["key"] != "ruyi+86003" || c.lastBody["config"].(map[string]interface{})["intro_time"] != float64(95) {
+		t.Fatalf("skip post: %d %v", st, c.lastBody)
+	}
+	st, _ = del(t, srv.URL+"/skip?key=ruyi%2B86003", nil)
+	if st != 200 || c.lastMethodPath != "DELETE /api/skipconfigs?key=ruyi%2B86003" {
+		t.Fatalf("skip delete: %d %s", st, c.lastMethodPath)
+	}
+	st, _ = del(t, srv.URL+"/skip", nil)
+	if st != 400 {
+		t.Fatalf("skip delete needs key: %d", st)
+	}
+}
+
+func TestRecordDeleteAndClear(t *testing.T) {
+	_, srv, c := testApp(t)
+	st, _ := del(t, srv.URL+"/record?key=src%2B1", nil)
+	if st != 200 || c.lastMethodPath != "DELETE /api/playrecords?key=src%2B1" {
+		t.Fatalf("delete one: %d %s", st, c.lastMethodPath)
+	}
+	st, _ = del(t, srv.URL+"/record", nil)
+	if st != 200 || c.lastMethodPath != "DELETE /api/playrecords" {
+		t.Fatalf("clear all: %d %s", st, c.lastMethodPath)
+	}
+}
+
+func TestBangumiAndHomeRows(t *testing.T) {
+	_, srv, _ := testApp(t)
+	_, h, b := get(t, srv.URL+"/bangumi", nil)
+	var items []BangumiItem
+	decode(t, b, &items)
+	if len(items) != 2 || h.Get("Cache-Control") != "public, max-age=600" {
+		t.Fatalf("bangumi: %s %v", b, h)
+	}
+	for _, it := range items {
+		if it.Title == "" || it.Day == "" {
+			t.Fatalf("bangumi item missing title/day: %+v", it)
+		}
+		if it.Title == "周一番" && (it.Rate != "7.5" || it.Year != "2026" || it.Poster != "http://b/1.jpg") {
+			t.Fatalf("bangumi fields: %+v", it)
+		}
+		if it.ID == float64(7) && it.Title != "sun" { // falls back to name when name_cn empty
+			t.Fatalf("name fallback: %+v", it)
+		}
+	}
+	_, _, b = get(t, srv.URL+"/home", nil)
+	s := string(b)
+	order := []string{`"user"`, `"continue"`, `"favorites"`, `"movie"`, `"tv"`, `"bangumi"`, `"anime"`, `"show"`}
+	for i := 1; i < len(order); i++ {
+		if strings.Index(s, order[i-1]) > strings.Index(s, order[i]) {
+			t.Fatalf("home key order: %v", order)
+		}
+	}
+	var home struct {
+		Favorites []Fav         `json:"favorites"`
+		Bangumi   []BangumiItem `json:"bangumi"`
+	}
+	decode(t, b, &home)
+	if len(home.Favorites) != 2 || len(home.Bangumi) != 2 {
+		t.Fatalf("home rows: favs=%d bangumi=%d", len(home.Favorites), len(home.Bangumi))
 	}
 }

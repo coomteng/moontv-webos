@@ -1,4 +1,4 @@
-# Build context = repository root (see api/compose.snippet.yml). Multi-stage: static binary, tiny runtime.
+# Build context = repository root (see api-go/compose.snippet.yml). Multi-stage: static binary, tiny runtime.
 FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY api-go/go.mod api-go/go.sum ./

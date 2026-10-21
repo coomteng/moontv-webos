@@ -97,6 +97,21 @@ var API = (function () {
     home: function () { return get('/home'); },
     filters: function () { return get('/filters'); },
     titles: function () { return get('/titles', null, 120000); },
+    /* --- web-UI parity features --- */
+    advancedFilters: function (type) { return get('/filters/advanced', { type: type }); },
+    advancedList: function (type, params, start, size) {
+      var p = { type: type, start: start, size: size };
+      for (var k in params) if (params.hasOwnProperty(k) && params[k]) p[k] = params[k];
+      return get('/list/advanced', p, 60000);
+    },
+    favorites: function () { return get('/favorites'); },
+    addFavorite: function (key, fav) { return request('POST', '/favorites', { key: key, favorite: fav }); },
+    removeFavorite: function (key) { return request('DELETE', '/favorites' + qs({ key: key })); },
+    skipConfig: function (key) { return get('/skip', { key: key }); },
+    saveSkipConfig: function (key, cfg) { return request('POST', '/skip', { key: key, config: cfg }); },
+    clearRecords: function () { return request('DELETE', '/record'); },
+    removeRecord: function (key) { return request('DELETE', '/record' + qs({ key: key })); },
+    bangumi: function () { return get('/bangumi'); },
     /* --- accounts --- */
     login: function (username, password) { return request('POST', '/login', { username: username, password: password }, 20000, true); },
     logout: function () { var t = session; session = ''; return t ? request('POST', '/logout', { session: t }, 10000, true).then(null, function () {}) : Promise.resolve(); },

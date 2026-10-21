@@ -1,7 +1,7 @@
 # MoonTV for LG webOS (com.ting.moontv)
 
 TV-native front-end for MoonTV, built for the Chrome 53 WebView of webOS 4.x (ES5 + flexbox only).
-Data comes from the bridge service `../api/moontv-api.py`, which logs into MoonTV and exposes CORS-enabled JSON
+Data comes from the bridge service in `../api-go/`, which logs into MoonTV and exposes CORS-enabled JSON
 plus cached posters (see `../README.md` for deployment).
 
 ## Configure

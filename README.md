@@ -43,7 +43,7 @@ This project is a separate TV interface for the same MoonTV. It installs as its 
 
 ### Step 1: add the bridge next to MoonTV
 
-The bridge is a small Python program packaged as a Docker image. It belongs in the same compose file as MoonTV. Open your MoonTV `docker-compose.yml`, copy the service from [api/compose.snippet.yml](api/compose.snippet.yml) into it, and change three things:
+The bridge is a small Python program packaged as a Docker image. It belongs in the same compose file as MoonTV. Open your MoonTV `docker-compose.yml`, copy the service from [api-go/compose.snippet.yml](api-go/compose.snippet.yml) into it, and change three things:
 
 - `MOONTV_USER` and `MOONTV_PASS`: a MoonTV account the bridge logs in with.
 - The network name must match the one `moontv-core` uses.
@@ -92,7 +92,7 @@ Remote-key reference, updating, and pre-provisioned accounts are described in [a
 ## Questions
 
 **Why a bridge at all? Can't the TV talk to MoonTV directly?**
-The TV app starts from a local file, and browsers refuse to send MoonTV's login cookie from that origin. MoonTV accepts no other form of authentication, so the bridge logs in on the TV's behalf and passes the data through. It is a single static Go binary (a Python version with identical behaviour lives in `api/`).
+The TV app starts from a local file, and browsers refuse to send MoonTV's login cookie from that origin. MoonTV accepts no other form of authentication, so the bridge logs in on the TV's behalf and passes the data through. It is a single static Go binary.
 
 **Is it safe?**
 The bridge has no access control and is meant for a home network only. Do not expose port 8788 to the internet.
@@ -105,8 +105,7 @@ Not necessarily. A desktop browser is years ahead of the TV. The repository incl
 | Directory | Contents |
 |---|---|
 | `app/` | The TV app. Plain HTML, CSS and JavaScript, no build step. |
-| `api-go/` | The bridge, in Go: static 9 MB binary, 18 MB image, ~8–16 MB RSS. This is what the compose snippet deploys. |
-| `api/` | The same bridge in Python (standard library only). Kept as a reference implementation; `test/compare_bridges.py` diffs the two. |
+| `api-go/` | The bridge: a static Go binary (9 MB), 18 MB image, 8–16 MB RSS. Dockerfile and compose snippet included. |
 | `sim/` | The simulated-TV page shown in a desktop browser. |
 | `tools/` | `build_ipk.sh` for packaging, `gen_pinyin.py` for the pinyin table. |
 | `test/` | Headless walk-through script that runs without a TV. |

@@ -40,7 +40,7 @@ func newApp(cfg Config) *App {
 func cors(w http.ResponseWriter) {
 	h := w.Header()
 	h.Set("Access-Control-Allow-Origin", "*")
-	h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	h.Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 	h.Set("Access-Control-Allow-Headers", "Content-Type, X-Session")
 }
 
@@ -169,6 +169,17 @@ func (a *App) routes() http.Handler {
 			a.handleGet(w, r, p)
 		case http.MethodPost:
 			a.handlePost(w, r, p)
+		case http.MethodDelete:
+			switch p {
+			case "/favorites":
+				a.handleFavorites(w, r, nil)
+			case "/skip":
+				a.handleSkip(w, r, nil)
+			case "/record":
+				a.handleRecordDelete(w, r)
+			default:
+				sendError(w, r, 404, "not found")
+			}
 		default:
 			sendError(w, r, 405, "method not allowed")
 		}
@@ -210,6 +221,41 @@ func (a *App) handleGet(w http.ResponseWriter, r *http.Request, p string) {
 		a.handleHome(w, r)
 	case p == "/filters":
 		send(w, r, 200, filtersJSON(), "", 3600)
+	case p == "/filters/advanced":
+		kind := g("type")
+		groups := advFilters(kind)
+		if groups == nil {
+			sendError(w, r, 400, "bad type")
+			return
+		}
+		sendJSON(w, r, 200, groups, 3600)
+	case p == "/list/advanced":
+		kind := g("type")
+		if advFilters(kind) == nil {
+			sendError(w, r, 400, "bad type")
+			return
+		}
+		params := map[string]string{}
+		for _, k := range []string{"sort", "category", "region", "year", "platform"} {
+			params[k] = g(k)
+		}
+		items, err := a.advancedList(kind, params, atoi(g("start"), 0), atoi(g("size"), 24))
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+		sendJSON(w, r, 200, items, 0)
+	case p == "/favorites":
+		a.handleFavorites(w, r, nil)
+	case p == "/skip":
+		a.handleSkip(w, r, nil)
+	case p == "/bangumi":
+		items, err := a.bangumiToday()
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+		sendJSON(w, r, 200, items, 600)
 	case p == "/titles":
 		v, err := a.mem.get("titles", titlesTTL, func() (interface{}, error) { return a.buildTitles() })
 		if err != nil {
@@ -315,13 +361,29 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 		}
 		rows[s.key] = items
 	}
-	// fixed key order to match the Python output
+	favs, _ := favorites(up)       // per-user; empty on error
+	bangumi, _ := a.bangumiToday() // shared; empty on error
+	if favs == nil {
+		favs = []Fav{}
+	}
+	if bangumi == nil {
+		bangumi = []BangumiItem{}
+	}
+	// fixed key order (the TV renders rows in this order)
 	var b bytes.Buffer
 	b.WriteString(`{"user": `)
 	b.Write(marshal(up.Username))
 	b.WriteString(`, "continue": `)
 	b.Write(marshal(cont))
-	for _, k := range []string{"movie", "tv", "anime", "show"} {
+	b.WriteString(`, "favorites": `)
+	b.Write(marshal(favs))
+	for _, k := range []string{"movie", "tv"} {
+		fmt.Fprintf(&b, `, %q: `, k)
+		b.Write(marshal(rows[k]))
+	}
+	b.WriteString(`, "bangumi": `)
+	b.Write(marshal(bangumi))
+	for _, k := range []string{"anime", "show"} {
 		fmt.Fprintf(&b, `, %q: `, k)
 		b.Write(marshal(rows[k]))
 	}
@@ -362,6 +424,10 @@ func (a *App) handlePost(w http.ResponseWriter, r *http.Request, p string) {
 		a.remoteNew(w, r, body)
 	case strings.HasPrefix(p, "/remote/"):
 		a.remotePost(w, r, p, body)
+	case p == "/favorites":
+		a.handleFavorites(w, r, body)
+	case p == "/skip":
+		a.handleSkip(w, r, body)
 	case p == "/login":
 		user, pw := strings.TrimSpace(str(body["username"])), str(body["password"])
 		if user == "" || pw == "" {
