@@ -56,7 +56,7 @@ To check it worked, open `http://<server-ip>:8788/` in a browser. If the simulat
 If you would rather not touch the MoonTV compose file, the bridge also runs on its own:
 
 ```bash
-docker build -t moontv-api -f api/Dockerfile https://github.com/coomteng/moontv-webos.git#main
+docker build -t moontv-api -f api-go/Dockerfile https://github.com/coomteng/moontv-webos.git#main
 docker run -d -p 8788:8788 \
   -e MOONTV_UPSTREAM=http://<moontv-host>:3000 \
   -e MOONTV_USER=<user> -e MOONTV_PASS=<password> \
@@ -92,7 +92,7 @@ Remote-key reference, updating, and pre-provisioned accounts are described in [a
 ## Questions
 
 **Why a bridge at all? Can't the TV talk to MoonTV directly?**
-The TV app starts from a local file, and browsers refuse to send MoonTV's login cookie from that origin. MoonTV accepts no other form of authentication, so the bridge logs in on the TV's behalf and passes the data through. It uses only the Python standard library.
+The TV app starts from a local file, and browsers refuse to send MoonTV's login cookie from that origin. MoonTV accepts no other form of authentication, so the bridge logs in on the TV's behalf and passes the data through. It is a single static Go binary (a Python version with identical behaviour lives in `api/`).
 
 **Is it safe?**
 The bridge has no access control and is meant for a home network only. Do not expose port 8788 to the internet.
@@ -105,7 +105,8 @@ Not necessarily. A desktop browser is years ahead of the TV. The repository incl
 | Directory | Contents |
 |---|---|
 | `app/` | The TV app. Plain HTML, CSS and JavaScript, no build step. |
-| `api/` | The bridge, `moontv-api.py`, with its Dockerfile and compose snippet. |
+| `api-go/` | The bridge, in Go: static 9 MB binary, 18 MB image, ~8–16 MB RSS. This is what the compose snippet deploys. |
+| `api/` | The same bridge in Python (standard library only). Kept as a reference implementation; `test/compare_bridges.py` diffs the two. |
 | `sim/` | The simulated-TV page shown in a desktop browser. |
 | `tools/` | `build_ipk.sh` for packaging, `gen_pinyin.py` for the pinyin table. |
 | `test/` | Headless walk-through script that runs without a TV. |

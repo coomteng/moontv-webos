@@ -56,7 +56,7 @@ MoonTV 自带网页界面，在电脑和手机上都好用，但在老款 LG 电
 如果不想合进 MoonTV 的 compose，也可以单独跑：
 
 ```bash
-docker build -t moontv-api -f api/Dockerfile https://github.com/coomteng/moontv-webos.git#main
+docker build -t moontv-api -f api-go/Dockerfile https://github.com/coomteng/moontv-webos.git#main
 docker run -d -p 8788:8788 \
   -e MOONTV_UPSTREAM=http://<MoonTV地址>:3000 \
   -e MOONTV_USER=<账号> -e MOONTV_PASS=<密码> \
@@ -92,7 +92,7 @@ ares-install --device <电视名> dist/*.ipk
 ## 常见问题
 
 **为什么要多跑一个桥接，不能直接连 MoonTV 吗？**
-电视应用是从本地文件启动的，浏览器不允许它带着 MoonTV 的登录 cookie 去请求数据，MoonTV 也不支持别的登录方式。桥接替电视登录，再把数据转给它。桥接只用 Python 标准库，没有别的依赖。
+电视应用是从本地文件启动的，浏览器不允许它带着 MoonTV 的登录 cookie 去请求数据，MoonTV 也不支持别的登录方式。桥接替电视登录，再把数据转给它。桥接是一个静态编译的 Go 程序（`api/` 里有行为完全一致的 Python 版）。
 
 **安全吗？**
 桥接没有做访问控制，设计上只在家里的局域网用。不要把 8788 端口开到公网。
@@ -105,7 +105,8 @@ ares-install --device <电视名> dist/*.ipk
 | 目录 | 内容 |
 |---|---|
 | `app/` | 电视应用本身。纯 HTML、CSS、JavaScript，没有构建步骤。 |
-| `api/` | 桥接程序 `moontv-api.py`，加上 Dockerfile 和 compose 片段。 |
+| `api-go/` | 桥接程序的 Go 版：9 MB 静态二进制，18 MB 镜像，运行时约 8–16 MB 内存。compose 片段部署的是这个。 |
+| `api/` | 同一个桥接的 Python 版（只用标准库），作为参照实现保留；`test/compare_bridges.py` 可以对拍两者。 |
 | `sim/` | 浏览器里的模拟电视页面。 |
 | `tools/` | 打包脚本 `build_ipk.sh`，拼音词表生成脚本 `gen_pinyin.py`。 |
 | `test/` | 无需电视的自动化走查脚本。 |
