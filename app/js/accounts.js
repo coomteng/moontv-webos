@@ -186,7 +186,7 @@ var Accounts = (function () {
 
   function renderAdd() {
     $('login-title').textContent = '添加用户';
-    $('login-sub').textContent = '用拼音键盘的 EN 模式输入；确认键 编辑，蓝键 登录，返回 取消';
+    $('login-sub').textContent = '确认键 编辑字段 · 键盘内蓝键 确认输入 · 蓝键/「登录并记住」 登录 · 返回 取消';
     $('f-user').textContent = user || '';
     $('f-pass').textContent = pass ? new Array(pass.length + 1).join('•') : '';
     UI.toggleClass($('f-user-wrap'), 'empty', !user);
@@ -226,6 +226,7 @@ var Accounts = (function () {
       /* re-editing the password always starts empty (you cannot see what was there) */
       value: i === 0 ? user : '',
       english: true,
+      submitLabel: '确认',
       onChange: function () {},
       onSubmit: function (v) { setField(i, v); if (i === 0 && !pass) { field = 1; zonesAdd(); Nav.focusZoneByName('form', 1); } },
       onClose: function (v) { setField(i, v); }

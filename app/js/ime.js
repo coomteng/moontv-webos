@@ -28,7 +28,8 @@ var IME = (function () {
     ['z', 'x', 'c', 'v', 'b', 'n', 'm', '7', '8', '9'],
     ['MODE', 'SPACE', 'DEL', 'CLEAR', '0', 'GO']
   ];
-  var LABELS = { MODE: '中/EN', SPACE: '空格', DEL: '删除', CLEAR: '清空', GO: '搜索' };
+  var LABELS = { MODE: '中/EN', SPACE: '空格', DEL: '删除', CLEAR: '清空', GO: '确认' };
+  var goLabel = LABELS.GO;   /* per-open: '搜索' in the search view, '确认' elsewhere */
   var MAX_CANDS = 10;
 
   var open = false;
@@ -161,6 +162,10 @@ var IME = (function () {
     UI.toggleClass(root, 'en', !chinese);
     var modeKey = keyEl(3, 0);
     if (modeKey) modeKey.textContent = chinese ? '中' : 'EN';
+    var goKey = keyEl(3, 5);
+    if (goKey) goKey.textContent = goLabel;
+    var hint = $('ime-hint');
+    if (hint) hint.textContent = '数字键 选字 · 绿键 首选 · 红键 删除 · 黄键 中/EN · 蓝键 ' + goLabel + ' · 返回 删除/关闭';
     var placeholder = $('ime-placeholder');
     if (placeholder) UI.toggleClass(placeholder, 'hidden', !!(text || buf));
 
@@ -328,6 +333,7 @@ var IME = (function () {
     text = opts && opts.value ? String(opts.value) : '';
     buf = '';
     if (opts && opts.english !== undefined) chinese = !opts.english;
+    goLabel = (opts && opts.submitLabel) || LABELS.GO;
     recompute();
     focusRow = 1; focusCol = 0;           /* start on 'a' */
     open = true;

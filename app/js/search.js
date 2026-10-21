@@ -114,6 +114,7 @@
     UI.addClass(el, 'editing');
     IME.open({
       value: el.value,
+      submitLabel: '搜索',
       onChange: function (v) { el.value = v; },
       onSubmit: function (v) { UI.removeClass(el, 'editing'); runSearch(v); },
       onClose: function (v) { el.value = v; UI.removeClass(el, 'editing'); }
