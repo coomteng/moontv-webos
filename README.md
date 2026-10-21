@@ -28,7 +28,11 @@ This project is a separate TV interface for the same MoonTV. It installs as its 
 |---|---|
 | ![TV keyboard with QR](docs/screenshots/04-phone-qr.jpg) | <img src="docs/screenshots/05-phone-input.jpg" width="260" alt="Phone input page"> |
 
-**Browse like the web.** Each category page has the same filters as MoonTV's web UI, including the 全部 tab with sort (综合 / 近期热度 / 首映时间 / 高分优先), genre, region, year and platform. Favourites, skip-intro/outro settings and play history are shared with the web UI.
+**Browse like the web.** Each category page has the same filters as MoonTV's web UI, including the 全部 tab with sort (综合 / 近期热度 / 首映时间 / 高分优先), genre, region, year and platform. The home screen has the same rows too: 继续观看, 我的收藏, hot movies and series, 新番放送 (this season's anime by weekday), anime and variety.
+
+**Shared with the web UI.** Favourites (green key on a detail page), play history and resume positions, and per-show skip-intro / skip-outro points (yellow and blue keys while playing) are all stored in your MoonTV, so what you set on the TV shows up in the browser and the other way round.
+
+**Picks a working source for you.** A show usually has a dozen sources of varying quality. The detail page tests each one (latency, download speed, resolution), sorts them, greys out the dead ones and preselects the best; yellow re-tests.
 
 **Several people, separate accounts.** Each person logs in with their MoonTV account once and the TV remembers it. Next time the TV starts straight into whoever used it last. To switch, select the user name in the top bar to log out; a picker with one tile per account appears, and selecting a tile logs in without a password.
 
@@ -45,7 +49,7 @@ This project is a separate TV interface for the same MoonTV. It installs as its 
 
 ### Step 1: add the bridge next to MoonTV
 
-The bridge is a small Python program packaged as a Docker image. It belongs in the same compose file as MoonTV. Open your MoonTV `docker-compose.yml`, copy the service from [api-go/compose.snippet.yml](api-go/compose.snippet.yml) into it, and change three things:
+The bridge is a small Go program packaged as an 18 MB Docker image. It belongs in the same compose file as MoonTV. Open your MoonTV `docker-compose.yml`, copy the service from [api-go/compose.snippet.yml](api-go/compose.snippet.yml) into it, and change three things:
 
 - `MOONTV_USER` and `MOONTV_PASS`: a MoonTV account the bridge logs in with.
 - The network name must match the one `moontv-core` uses.
@@ -94,7 +98,13 @@ Remote-key reference, updating, and pre-provisioned accounts are described in [a
 ## Questions
 
 **Why a bridge at all? Can't the TV talk to MoonTV directly?**
-The TV app starts from a local file, and browsers refuse to send MoonTV's login cookie from that origin. MoonTV accepts no other form of authentication, so the bridge logs in on the TV's behalf and passes the data through. It is a single static Go binary.
+The TV app starts from a local file, and browsers refuse to send MoonTV's login cookie from that origin. MoonTV accepts no other form of authentication, so the bridge logs in on the TV's behalf and passes the data through. It is a single static Go binary that idles at about 8 MB of memory.
+
+**Does it change anything in MoonTV?**
+No. The bridge only calls MoonTV's existing API, with the same requests its web UI makes. Nothing is installed into the MoonTV container and no data format is invented; favourites, history and skip settings are MoonTV's own.
+
+**How do I update?**
+Bridge: after a new commit lands on `main`, rebuild the stack (Portainer → *Update the stack* with re-build, or `docker compose build --no-cache moontv-api && docker compose up -d --force-recreate --no-deps moontv-api`). App: `git pull`, `tools/build_ipk.sh`, `ares-install`.
 
 **Is it safe?**
 The bridge has no access control and is meant for a home network only. Do not expose port 8788 to the internet.
@@ -110,7 +120,7 @@ Not necessarily. A desktop browser is years ahead of the TV. The repository incl
 | `api-go/` | The bridge: a static Go binary (9 MB), 18 MB image, 8–16 MB RSS. Dockerfile and compose snippet included. |
 | `sim/` | The simulated-TV page shown in a desktop browser. |
 | `tools/` | `build_ipk.sh` for packaging, `gen_pinyin.py` for the pinyin table. |
-| `test/` | Headless walk-through script that runs without a TV. |
+| `test/` | Headless walk-through scripts (`walk.js`, `walk-features.js`) that run without a TV. |
 
 ## License
 

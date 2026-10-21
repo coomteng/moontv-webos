@@ -28,7 +28,11 @@ MoonTV 自带网页界面，在电脑和手机上都好用，但在老款 LG 电
 |---|---|
 | ![电视键盘和二维码](docs/screenshots/04-phone-qr.jpg) | <img src="docs/screenshots/05-phone-input.jpg" width="260" alt="手机输入页"> |
 
-**筛选和网页版一样**。每个分类页的筛选项和网页版相同，包括"全部"标签下的排序（综合 / 近期热度 / 首映时间 / 高分优先）、类型、地区、年代、平台。收藏、跳片头片尾的设置、观看记录都和网页版互通。
+**筛选和网页版一样**。每个分类页的筛选项和网页版相同，包括"全部"标签下的排序（综合 / 近期热度 / 首映时间 / 高分优先）、类型、地区、年代、平台。首页的行也一样：继续观看、我的收藏、热门电影、热门剧集、新番放送（本季新番按星期排）、热门动漫、热门综艺。
+
+**和网页版互通**。收藏（详情页按绿键）、观看记录和进度、每部剧的跳片头片尾点（播放时按黄键和蓝键设置）都存在你的 MoonTV 里，电视上设的，浏览器里能看到，反过来也一样。
+
+**帮你挑能用的源**。一部剧通常有十几个来源，质量参差。详情页会逐个测一遍（延迟、下载速度、分辨率），排好序，用不了的灰掉，默认选最好的那个；按黄键重测。
 
 **家里几个人用，各看各的**。每个人用自己的 MoonTV 账号登录一次，电视就记住了。下次开机直接进上次那个人的账号；想换人，在顶栏点用户名退出，就会出现一个选人页面，点头像进入，不用再输密码。
 
@@ -45,7 +49,7 @@ MoonTV 自带网页界面，在电脑和手机上都好用，但在老款 LG 电
 
 ### 第一步：把桥接加到 MoonTV 旁边
 
-桥接是一个 Python 小程序，打包成 Docker 镜像，和 MoonTV 放在同一个 compose 里。打开你 MoonTV 的 `docker-compose.yml`，把 [api-go/compose.snippet.yml](api-go/compose.snippet.yml) 里的那段服务抄进去，改三个地方：
+桥接是一个 Go 写的小程序，打包成 18 MB 的 Docker 镜像，和 MoonTV 放在同一个 compose 里。打开你 MoonTV 的 `docker-compose.yml`，把 [api-go/compose.snippet.yml](api-go/compose.snippet.yml) 里的那段服务抄进去，改三个地方：
 
 - `MOONTV_USER` 和 `MOONTV_PASS`：填一个 MoonTV 账号，桥接用它登录。
 - 网络名要和 `moontv-core` 用的一致。
@@ -94,7 +98,13 @@ ares-install --device <电视名> dist/*.ipk
 ## 常见问题
 
 **为什么要多跑一个桥接，不能直接连 MoonTV 吗？**
-电视应用是从本地文件启动的，浏览器不允许它带着 MoonTV 的登录 cookie 去请求数据，MoonTV 也不支持别的登录方式。桥接替电视登录，再把数据转给它。桥接是一个静态编译的 Go 程序。
+电视应用是从本地文件启动的，浏览器不允许它带着 MoonTV 的登录 cookie 去请求数据，MoonTV 也不支持别的登录方式。桥接替电视登录，再把数据转给它。桥接是一个静态编译的 Go 程序，空闲时只占 8 MB 左右内存。
+
+**会改动 MoonTV 吗？**
+不会。桥接只调用 MoonTV 现有的接口，发的请求和网页版一模一样，不往 MoonTV 容器里装任何东西，也不另造数据格式；收藏、记录、跳片头设置都是 MoonTV 自己的。
+
+**怎么更新？**
+桥接：main 分支有新提交后重建栈（Portainer 里 *Update the stack* 勾选 re-build，或者 `docker compose build --no-cache moontv-api && docker compose up -d --force-recreate --no-deps moontv-api`）。应用：`git pull`，`tools/build_ipk.sh`，`ares-install`。
 
 **安全吗？**
 桥接没有做访问控制，设计上只在家里的局域网用。不要把 8788 端口开到公网。
@@ -110,7 +120,7 @@ ares-install --device <电视名> dist/*.ipk
 | `api-go/` | 桥接程序：Go 写的静态二进制（9 MB），镜像 18 MB，运行时约 8–16 MB 内存。附 Dockerfile 和 compose 片段。 |
 | `sim/` | 浏览器里的模拟电视页面。 |
 | `tools/` | 打包脚本 `build_ipk.sh`，拼音词表生成脚本 `gen_pinyin.py`。 |
-| `test/` | 无需电视的自动化走查脚本。 |
+| `test/` | 无需电视的自动化走查脚本（`walk.js`、`walk-features.js`）。 |
 
 ## 许可
 
