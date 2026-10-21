@@ -12,6 +12,8 @@
       - MOONTV_UPSTREAM=http://moontv-core:3000
       - MOONTV_USER=${MOONTV_USER}      # MoonTV login used by the bridge
       - MOONTV_PASS=${MOONTV_PASS}
+      # optional: accounts pre-loaded onto every TV on its first start ("user:pass,user2:pass2")
+      # - MOONTV_SEED_ACCOUNTS=${MOONTV_SEED_ACCOUNTS}
     volumes:
       - moontv-api-cache:/cache
     networks:

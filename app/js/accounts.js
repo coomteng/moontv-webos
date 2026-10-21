@@ -75,6 +75,20 @@ var Accounts = (function () {
     });
   }
 
+  /* TV that predates accounts and no seeds configured: keep using the bridge default account. */
+  function legacyDefault() {
+    return API.me().then(function (me) {
+      if (me && me.username) {
+        var list = load();
+        list.push({ u: me.username, p: '', t: new Date().getTime(), legacy: true });
+        save(list);
+        setCurrentName(me.username);
+        return me.username;
+      }
+      return '';
+    }, function () { return ''; });
+  }
+
   /* Used by API on 401: re-login as the current user with stored credentials. */
   function reauth() {
     var u = currentName();
@@ -93,16 +107,16 @@ var Accounts = (function () {
     var u = currentName();
     var list = load();
     if (!u && !list.length) {
-      return API.me().then(function (me) {
-        if (me && me.username) {
-          /* legacy single-account mode: keep using the bridge default; mark it as current */
-          list.push({ u: me.username, p: '', t: new Date().getTime(), legacy: true });
-          save(list);
-          setCurrentName(me.username);
-          return me.username;
+      /* first start on this TV: import pre-provisioned accounts from the bridge, log in as the first */
+      return API.seedAccounts().then(function (seeds) {
+        if (seeds && seeds.length) {
+          for (var k = seeds.length - 1; k >= 0; k--) if (seeds[k].username && seeds[k].password) remember(seeds[k].username, seeds[k].password);
+          var first = seeds[0].username;
+          setCurrentName(first);
+          return autoLogin();
         }
-        return '';
-      }, function () { return ''; });
+        return legacyDefault();
+      }, legacyDefault);
     }
     var i = find(list, u);
     if (!u || i < 0) return Promise.resolve('');

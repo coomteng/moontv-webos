@@ -15,6 +15,7 @@ Endpoints (all GET unless noted):
   /record  (GET)               all play records
   /record  (POST {key,record}) save a play record
   /login (POST {username,password}) -> {session}; send it back as X-Session header. /logout, /me
+  /seed-accounts               accounts from MOONTV_SEED_ACCOUNTS, imported by a TV on first start
   /probe   (POST {items:[{source,source_name,url}], fresh?})  HLS speed/quality probe, cached 15 min;
                                fresh:true re-measures (the TV's 重新测速 button)
   /health
@@ -47,6 +48,9 @@ POSTER_TTL = 7 * 24 * 3600
 LIST_TTL = 10 * 60  # douban lists change slowly; cache in memory 10 min
 # Optional: serve the TV app itself (for the browser simulator). Empty = disabled.
 APP_DIR = os.environ.get("MOONTV_APP_DIR", "")
+# Optional: accounts pre-provisioned to TVs on their first start, "user:pass,user2:pass2".
+# Only served on the LAN by this bridge; the TV stores them locally and never asks again.
+SEED_ACCOUNTS = [a.split(":", 1) for a in os.environ.get("MOONTV_SEED_ACCOUNTS", "").split(",") if ":" in a]
 SIM_FILE = os.environ.get("MOONTV_SIM", "")
 
 
@@ -619,6 +623,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return None
             if p == "/health":
                 return self._json({"ok": True, "upstream": UPSTREAM, "app": bool(APP_DIR), "sim": bool(SIM_FILE)})
+            if p == "/seed-accounts":
+                return self._json([{"username": u, "password": pw} for u, pw in SEED_ACCOUNTS])
             if p == "/me":
                 up = self._session()
                 return self._json({"username": up.username, "default": up is UP})

@@ -101,6 +101,7 @@ var API = (function () {
     login: function (username, password) { return request('POST', '/login', { username: username, password: password }, 20000, true); },
     logout: function () { var t = session; session = ''; return t ? request('POST', '/logout', { session: t }, 10000, true).then(null, function () {}) : Promise.resolve(); },
     me: function () { return get('/me'); },
+    seedAccounts: function () { return get('/seed-accounts', null, 10000); },
     setSession: function (t) { session = t || ''; },
     hasSession: function () { return !!session; },
     setReauth: function (fn) { reauth = fn; },

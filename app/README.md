@@ -34,6 +34,8 @@ The bridge logs in with its default account (`MOONTV_USER`). A TV can additional
 `POST /login {username,password}` returns a session token, sent as `X-Session` on every request; per-user data
 (play records, 继续观看) then comes from that account. Credentials are remembered in the TV's `localStorage`
 (obfuscated, not encrypted) so they are entered once; on bridge restart the app re-logs in silently.
+To pre-provision accounts on every TV's first start, set `MOONTV_SEED_ACCOUNTS="user:pass,user2:pass2"` on the bridge
+(served at `/seed-accounts` to the LAN; the TV imports them once and logs in as the first).
 
 ## Remote keys
 ←→↑↓ move focus · OK select / play-pause · Back (461) go back / exit · in player ←→ seek ±10 s, ↑↓ episode strip ·
