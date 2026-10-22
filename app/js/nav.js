@@ -216,7 +216,13 @@ var Nav = (function () {
 
   /* ---- scroll helpers: translate `container` so `el` is inside the viewport ----
    * `el` must be a direct (offset) child of `container`, and `container` is position:relative. */
+  /* While a focus change is caused by the pointer hovering, views must not scroll the page: the
+   * pointer can only reach what is on screen, so auto-scrolling would push things out of reach.
+   * Scrolling then happens only through the wheel (pointer mode) or ↑↓/←→ (key mode). */
+  var hoverFocus = false;
+
   function scrollX(container, el, viewW, padL, padR) {
+    if (hoverFocus) return;
     var tx = UI.getTx(container);
     var left = el.offsetLeft, w = el.offsetWidth;
     if (left + tx < padL) tx = padL - left;
@@ -226,6 +232,7 @@ var Nav = (function () {
   }
 
   function scrollY(container, el, viewH, padT, padB) {
+    if (hoverFocus) return;
     var ty = UI.getTy(container);
     var top = el.offsetTop, h = el.offsetHeight;
     if (top + ty < padT) ty = padT - top;
@@ -236,6 +243,7 @@ var Nav = (function () {
 
   /* Pin `el` (a direct child) to the top of its container. */
   function pinTop(container, el, offset) {
+    if (hoverFocus) return;
     var ty = -(el.offsetTop) + (offset || 0);
     if (ty > 0) ty = 0;
     UI.translate(container, UI.getTx(container), ty);
@@ -277,7 +285,8 @@ var Nav = (function () {
     lastHover = hit.el;
     if (hit.el === focusedEl) return;
     ctx.zone = hit.zone;
-    setFocusEl(hit.el, hit.z, hit.index);
+    hoverFocus = true;
+    try { setFocusEl(hit.el, hit.z, hit.index); } finally { hoverFocus = false; }
   }
 
   function onClick(e) {
@@ -286,7 +295,10 @@ var Nav = (function () {
     if (!hit) return;
     e.preventDefault();
     ctx.zone = hit.zone;
-    if (hit.el !== focusedEl) setFocusEl(hit.el, hit.z, hit.index);
+    if (hit.el !== focusedEl) {
+      hoverFocus = true;
+      try { setFocusEl(hit.el, hit.z, hit.index); } finally { hoverFocus = false; }
+    }
     enter();
   }
 

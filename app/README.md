@@ -62,7 +62,9 @@ Channels are in-memory, LAN-only, ids are random; needs `qrcode` on the bridge (
 
 ## Magic Remote (pointer)
 Handled centrally in `nav.js` so every view gets it: hovering a focusable item focuses it (switching zones as
-needed), clicking it is OK, the wheel steps down/up (rows, grid rows, chip rows, lists; across zones at the edges).
+needed) **without scrolling the page** — the pointer can only reach what is on screen, so scrolling is left to the
+wheel (pointer mode) and to ↑↓/←→ (key mode); clicking is OK; the wheel steps down/up (rows, grid rows, chip rows,
+lists; across zones at the edges).
 Player: pointer motion shows the OSD, click on the video toggles play/pause, click on the progress bar seeks,
 wheel seeks ±10 s; the bar gets a fatter hit target while the pointer is in use (`body.pointer`). Keyboard overlay:
 keys and candidates are clickable and highlight on hover. `test/walk-pointer.js` drives all of this with real

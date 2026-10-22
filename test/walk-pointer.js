@@ -17,6 +17,13 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); 
   await p.mouse.move(c.x, c.y); await sleep(300);
   ok((await focusText()) === c.t, 'hover focuses card in another row: ' + c.t.slice(0, 20));
   ok(await p.evaluate(() => document.body.classList.contains('pointer')), 'body.pointer set while pointer active');
+  // 1b. hovering a card in a lower row must NOT scroll the page (only wheel/keys scroll)
+  const tyBefore = await p.evaluate(() => parseInt(document.getElementById('home-rows').getAttribute('data-ty') || '0', 10));
+  const lastRow = await p.evaluate(() => { const rows = [...document.querySelectorAll('#home-rows .row')]; let best = null; rows.forEach(r => { const b = r.getBoundingClientRect(); if (b.top < 1080 && b.bottom > 300) best = r; }); const card = best.querySelectorAll('.card')[1]; const b = card.getBoundingClientRect(); return { x: b.left + b.width / 2, y: Math.min(b.top + 40, 1060), t: card.textContent }; });
+  await p.mouse.move(lastRow.x, lastRow.y); await sleep(400);
+  const tyAfter = await p.evaluate(() => parseInt(document.getElementById('home-rows').getAttribute('data-ty') || '0', 10));
+  ok((await focusText()) === lastRow.t, 'hover focuses a card in the lowest visible row');
+  ok(tyAfter === tyBefore, 'hover does not scroll the page (ty ' + tyBefore + ' -> ' + tyAfter + ')');
   // 2. wheel down on home → next row
   const before = await p.evaluate(() => [...document.querySelectorAll('#home-rows .row')].findIndex(r => r.querySelector('.focus')));
   await p.mouse.wheel({ deltaY: 120 }); await sleep(400);
