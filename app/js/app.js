@@ -221,7 +221,21 @@ var App = (function () {
   }
 
   /* ------------------------------------------------------------ bootstrap */
+  /* Show the installed version next to the logo (from appinfo.json, the single source of truth). */
+  function showVersion() {
+    var el = UI.$('app-version');
+    if (!el) return;
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'appinfo.json', true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) return;
+      try { var v = JSON.parse(xhr.responseText).version; if (v) el.textContent = 'v' + v; } catch (e) { /* ignore */ }
+    };
+    try { xhr.send(); } catch (e2) { /* ignore */ }
+  }
+
   function init() {
+    showVersion();
     buildTabs();
     UI.clock();
     setInterval(UI.clock, 15000);

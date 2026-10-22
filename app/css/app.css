@@ -21,7 +21,8 @@ img { -webkit-user-drag: none; }
   z-index: 5;
 }
 #topbar.hidden { display: none; }
-#topbar .logo { font-size: 40px; font-weight: bold; color: #fad778; margin-right: 50px; letter-spacing: 2px; }
+#topbar .logo { font-size: 40px; font-weight: bold; color: #fad778; margin-right: 50px; letter-spacing: 2px; white-space: nowrap; }
+#topbar .logo .ver { font-size: 16px; font-weight: normal; letter-spacing: 0; color: #5c6170; margin-left: 8px; vertical-align: baseline; }
 #topbar .tab {
   padding: 8px 28px; margin-right: 10px; border-radius: 12px;
   font-size: 30px; color: #b8bcc8; border: 4px solid transparent;
