@@ -29,11 +29,15 @@ var Nav = (function () {
 
   var ctx = null;
   var focusedEl = null;
+  var hoverFocus = false;   /* set while a pointer hover/click is changing focus (see scroll helpers) */
+  var lastHover = null;
+  var lastTarget = null;
 
   function items(z) { return z.getItems ? z.getItems() : (z.items || []); }
   function usable(z) { return !(z.disabled && z.disabled()) && items(z).length > 0; }
 
   function setFocusEl(el, z, i) {
+    if (!hoverFocus) { lastHover = null; lastTarget = null; }   /* key/zone-driven change: forget pointer memo */
     if (focusedEl && focusedEl !== el) UI.removeClass(focusedEl, 'focus');
     focusedEl = el;
     if (el) UI.addClass(el, 'focus');
@@ -219,8 +223,6 @@ var Nav = (function () {
   /* While a focus change is caused by the pointer hovering, views must not scroll the page: the
    * pointer can only reach what is on screen, so auto-scrolling would push things out of reach.
    * Scrolling then happens only through the wheel (pointer mode) or ↑↓/←→ (key mode). */
-  var hoverFocus = false;
-
   function scrollX(container, el, viewW, padL, padR) {
     if (hoverFocus) return;
     var tx = UI.getTx(container);
@@ -252,36 +254,68 @@ var Nav = (function () {
   /* ---------------------------------------------------------------- pointer (Magic Remote) */
   var pointerActive = false;          /* a mousemove was seen recently: show hover feedback */
   var pointerTimer = null;
-  var lastHover = null;
 
-  function zoneAndIndexOf(target) {
-    if (!ctx) return null;
-    for (var zi = 0; zi < ctx.zones.length; zi++) {
-      var z = ctx.zones[zi];
-      if (!usable(z)) continue;
-      var list = items(z);
-      for (var i = 0; i < list.length; i++) {
-        var el = list[i];
-        if (el === target || (el.contains && el.contains(target))) return { zone: zi, z: z, index: i, el: el };
+  /* Focusable things all carry one of these classes. Walking up from the event target to the
+   * nearest one is O(depth); only then do we look it up in the zones (O(items), but only when the
+   * hovered element actually changed, not on every mousemove). */
+  var FOCUSABLE = { card: 1, chip: 1, ep: 1, tab: 1, btn: 1, 'user-tile': 1, field: 1, 'ime-key': 1, 'ime-cand': 1 };
+  function closestFocusable(node) {
+    var depth = 0;
+    while (node && node !== document.body && depth < 8) {
+      if (node.nodeType === 1 && node.className) {
+        var cls = String(node.className).split(' ');
+        for (var i = 0; i < cls.length; i++) if (FOCUSABLE[cls[i]]) return node;
       }
+      if (node.id === 'search-input') return node;
+      node = node.parentNode;
+      depth++;
     }
     return null;
   }
 
+  function zoneAndIndexOf(target) {
+    if (!ctx) return null;
+    var el = closestFocusable(target);
+    if (!el) return null;
+    for (var zi = 0; zi < ctx.zones.length; zi++) {
+      var z = ctx.zones[zi];
+      if (!usable(z)) continue;
+      var list = items(z);
+      for (var i = 0; i < list.length; i++) if (list[i] === el) return { zone: zi, z: z, index: i, el: el };
+    }
+    return null;
+  }
+
+  var pointerLastBump = 0;
+  function bumpPointerTimer() {
+    /* re-arm at most every 500 ms: clearTimeout/setTimeout per mousemove is wasteful on the TV */
+    var now = new Date().getTime();
+    if (now - pointerLastBump < 500) return;
+    pointerLastBump = now;
+    if (pointerTimer) clearTimeout(pointerTimer);
+    pointerTimer = setTimeout(pointerIdle, 3000);
+  }
+  function pointerIdle() {
+    pointerActive = false;
+    lastTarget = null;
+    lastHover = null;
+    UI.removeClass(document.body, 'pointer');
+  }
   function markPointerActive() {
     pointerActive = true;
     UI.addClass(document.body, 'pointer');
-    if (pointerTimer) clearTimeout(pointerTimer);
-    pointerTimer = setTimeout(function () {
-      pointerActive = false;
-      UI.removeClass(document.body, 'pointer');
-    }, 3000);
+    pointerLastBump = 0;
+    bumpPointerTimer();
   }
 
   function onMouseMove(e) {
-    markPointerActive();
+    if (!pointerActive) markPointerActive(); else bumpPointerTimer();
+    if (e.target === lastTarget) return;
+    lastTarget = e.target;
+    var el = closestFocusable(e.target);
+    if (!el || el === lastHover) return;
     var hit = zoneAndIndexOf(e.target);
-    if (!hit || hit.el === lastHover) return;
+    if (!hit) return;
     lastHover = hit.el;
     if (hit.el === focusedEl) return;
     ctx.zone = hit.zone;
@@ -318,6 +352,7 @@ var Nav = (function () {
     wheelAcc = 0;
     move(0, dir);
     lastHover = null;
+    lastTarget = null;
   }
 
   function installPointer() {

@@ -263,6 +263,10 @@ img { -webkit-user-drag: none; }
 #ime-remote-url { margin-top: 10px; font-size: 18px; color: #6d7282; word-break: break-all; }
 
 /* ------------------------------------------------------------ Magic Remote (pointer) */
+/* While the pointer is in use, focus must track it instantly: no transitions on focus rings/scale
+   (key navigation keeps the 150 ms ease; one press = one move, where it feels fine). */
+body.pointer .card, body.pointer .chip, body.pointer .ep, body.pointer .tab, body.pointer .btn, body.pointer .user-tile,
+body.pointer .ime-key, body.pointer .ime-cand { -webkit-transition: none !important; transition: none !important; }
 body.pointer .card, body.pointer .chip, body.pointer .ep, body.pointer .tab, body.pointer .btn, body.pointer .user-tile,
 body.pointer .ime-key, body.pointer .ime-cand, body.pointer #osd-bar, body.pointer #video { cursor: pointer; }
 body.pointer #osd-bar { height: 16px; top: 106px; }         /* fatter target while the pointer is in use */
