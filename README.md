@@ -12,7 +12,7 @@ This project is a separate TV interface for the same MoonTV. It installs as its 
 
 ![Home](docs/screenshots/01-home.jpg)
 
-| Browse by category, with filters | Built-in pinyin keyboard |
+| Browse: the 全部 tab, sorted by rating | Built-in pinyin keyboard |
 |---|---|
 | ![Browse](docs/screenshots/02-browse.jpg) | ![Pinyin keyboard](docs/screenshots/03-pinyin-keyboard.jpg) |
 
