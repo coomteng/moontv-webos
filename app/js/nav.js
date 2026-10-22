@@ -15,6 +15,14 @@
  * }
  * Focus is expressed purely by the `.focus` class; nothing receives DOM focus except the
  * search input (deliberately, to open the IME).
+ *
+ * Magic Remote (pointer) support lives here too, so every view gets it for free:
+ *   mousemove over a zone item  -> that item becomes the focused one (zone switches if needed)
+ *   click on the focused item   -> same as OK
+ *   wheel                       -> move within the zone (vertical lists / grids / flow rows) or,
+ *                                  for horizontal strips, ←/→; between zones at the edges
+ * Views that need extra pointer behaviour (player OSD, keyboard) call Nav.pointer.* or listen
+ * to the 'nav:pointer' custom events.
  */
 var Nav = (function () {
   'use strict';
@@ -233,8 +241,84 @@ var Nav = (function () {
     UI.translate(container, UI.getTx(container), ty);
   }
 
+  /* ---------------------------------------------------------------- pointer (Magic Remote) */
+  var pointerActive = false;          /* a mousemove was seen recently: show hover feedback */
+  var pointerTimer = null;
+  var lastHover = null;
+
+  function zoneAndIndexOf(target) {
+    if (!ctx) return null;
+    for (var zi = 0; zi < ctx.zones.length; zi++) {
+      var z = ctx.zones[zi];
+      if (!usable(z)) continue;
+      var list = items(z);
+      for (var i = 0; i < list.length; i++) {
+        var el = list[i];
+        if (el === target || (el.contains && el.contains(target))) return { zone: zi, z: z, index: i, el: el };
+      }
+    }
+    return null;
+  }
+
+  function markPointerActive() {
+    pointerActive = true;
+    UI.addClass(document.body, 'pointer');
+    if (pointerTimer) clearTimeout(pointerTimer);
+    pointerTimer = setTimeout(function () {
+      pointerActive = false;
+      UI.removeClass(document.body, 'pointer');
+    }, 3000);
+  }
+
+  function onMouseMove(e) {
+    markPointerActive();
+    var hit = zoneAndIndexOf(e.target);
+    if (!hit || hit.el === lastHover) return;
+    lastHover = hit.el;
+    if (hit.el === focusedEl) return;
+    ctx.zone = hit.zone;
+    setFocusEl(hit.el, hit.z, hit.index);
+  }
+
+  function onClick(e) {
+    if (!ctx) return;
+    var hit = zoneAndIndexOf(e.target);
+    if (!hit) return;
+    e.preventDefault();
+    ctx.zone = hit.zone;
+    if (hit.el !== focusedEl) setFocusEl(hit.el, hit.z, hit.index);
+    enter();
+  }
+
+  /* Wheel: one notch = one step down/up — rows on home, rows in a grid, chips rows, lists; at the
+   * edge of a zone it moves to the next zone, like the ↓/↑ keys. (Horizontal movement is what the
+   * pointer itself is for, so the wheel never maps to ←/→.) */
+  var wheelAcc = 0;
+  function onWheel(e) {
+    if (!ctx) return;
+    markPointerActive();
+    var dy = e.deltaY || (e.detail ? e.detail * 40 : 0) || (e.wheelDelta ? -e.wheelDelta : 0);
+    if (!dy) return;
+    e.preventDefault();
+    wheelAcc += dy;
+    if (Math.abs(wheelAcc) < 40) return;
+    var dir = wheelAcc > 0 ? 1 : -1;
+    wheelAcc = 0;
+    move(0, dir);
+    lastHover = null;
+  }
+
+  function installPointer() {
+    document.addEventListener('mousemove', onMouseMove, false);
+    document.addEventListener('click', onClick, false);
+    document.addEventListener('wheel', onWheel, { passive: false });
+  }
+
+  function isPointerActive() { return pointerActive; }
+
   return {
     setContext: setContext, refresh: refresh, move: move, enter: enter, handleKey: handleKey,
+    installPointer: installPointer, isPointerActive: isPointerActive, hitTest: zoneAndIndexOf,
     focusZone: focusZone, focusZoneByName: focusZoneByName, clearFocus: clearFocus,
     scrollX: scrollX, scrollY: scrollY, pinTop: pinTop,
     current: function () { return ctx ? { zone: ctx.zones[ctx.zone], index: ctx.zones[ctx.zone] && ctx.zones[ctx.zone].index, el: focusedEl } : null; },

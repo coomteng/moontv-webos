@@ -18,7 +18,7 @@ This project is a separate TV interface for the same MoonTV. It installs as its 
 
 ## What it does
 
-**Works with the remote.** Arrow keys move, OK selects, Back goes up a level. Text is large enough to read from the couch.
+**Works with the remote.** Arrow keys move, OK selects, Back goes up a level. Text is large enough to read from the couch. The Magic Remote pointer works too: point at something to focus it, click to open, use the wheel to scroll; in the player, click the bar to seek.
 
 **Chinese input without hunting for letters.** European LG TVs have no Chinese input method, so the app brings its own pinyin keyboard. It takes full pinyin and initials (`lxrg` finds 兰香如故), and it pulls recent titles from your MoonTV for suggestions.
 

@@ -244,6 +244,7 @@ var App = (function () {
     syncClock();
     setInterval(syncClock, 60 * 60 * 1000);
     document.addEventListener('keydown', onKeyDown, false);
+    Nav.installPointer();
     /* Reduce scrolling/jumping from the TV browser default handlers. */
     window.addEventListener('scroll', function () { window.scrollTo(0, 0); }, false);
     API.setReauth(Accounts.reauth);

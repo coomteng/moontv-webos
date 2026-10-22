@@ -261,3 +261,10 @@ img { -webkit-user-drag: none; }
 #ime-remote .t1 { font-size: 28px; color: #fff; margin-bottom: 8px; }
 #ime-remote .t2 { font-size: 20px; color: #8f94a3; line-height: 1.4; }
 #ime-remote-url { margin-top: 10px; font-size: 18px; color: #6d7282; word-break: break-all; }
+
+/* ------------------------------------------------------------ Magic Remote (pointer) */
+body.pointer .card, body.pointer .chip, body.pointer .ep, body.pointer .tab, body.pointer .btn, body.pointer .user-tile,
+body.pointer .ime-key, body.pointer .ime-cand, body.pointer #osd-bar, body.pointer #video { cursor: pointer; }
+body.pointer #osd-bar { height: 16px; top: 106px; }         /* fatter target while the pointer is in use */
+body.pointer #osd-bar .pos::after { content: ""; position: absolute; right: -10px; top: -6px; width: 28px; height: 28px; border-radius: 50%; background: #fad778; }
+#osd-bar .pos { position: absolute; }

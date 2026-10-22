@@ -252,6 +252,46 @@
     updateTime();
   }
 
+  /* ---- Magic Remote: pointer on the player ----
+   * moving the pointer shows the OSD; click on the video toggles play/pause; click on the progress
+   * bar seeks to that position; the episode strip is a Nav zone so hover/click work there already;
+   * wheel = seek ±10 s. */
+  function bindPointer() {
+    var osd = $('osd');
+    document.getElementById('player').addEventListener('mousemove', function () {
+      if (!active) return;
+      showOsd(false);
+    }, false);
+    video.addEventListener('click', function (e) {
+      if (!active) return;
+      e.preventDefault();
+      togglePlay();
+    }, false);
+    $('osd-state').addEventListener('click', function (e) { if (active) { e.preventDefault(); togglePlay(); } }, false);
+    $('osd-bar').addEventListener('click', function (e) {
+      if (!active || !isFinite(video.duration) || !video.duration) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var r = this.getBoundingClientRect();
+      var frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      video.currentTime = frac * video.duration;
+      updateTime();
+      showOsd(false);
+    }, false);
+    osd.addEventListener('wheel', function (e) {
+      if (!active) return;
+      e.preventDefault();
+      e.stopPropagation();
+      seekBy((e.deltaY || 0) > 0 ? 10 : -10);
+    }, { passive: false });
+    document.getElementById('player').addEventListener('wheel', function (e) {
+      if (!active) return;
+      e.preventDefault();
+      e.stopPropagation();
+      seekBy((e.deltaY || 0) > 0 ? 10 : -10);
+    }, { passive: false });
+  }
+
   function togglePlay() {
     if (video.paused || video.ended) {
       var p = null;
@@ -355,7 +395,7 @@
 
   App.register('player', {
     enter: function (params) {
-      if (!video) { video = $('video'); bindVideo(); document.addEventListener('keyup', onKeyUp, false); }
+      if (!video) { video = $('video'); bindVideo(); bindPointer(); document.addEventListener('keyup', onKeyUp, false); }
       active = true;
       result = params.result;
       query = params.query || '';

@@ -393,9 +393,47 @@ var IME = (function () {
   }
 
   /* ---------------------------------------------------------------- open / close */
+  /* Magic Remote: click a key or a candidate; hover highlights it like the focus ring. */
+  var pointerBound = false;
+  function bindPointer() {
+    if (pointerBound) return;
+    pointerBound = true;
+    root.addEventListener('click', function (e) {
+      if (!open) return;
+      var t = e.target;
+      while (t && t !== root && !UI.hasClass(t, 'ime-key') && !UI.hasClass(t, 'ime-cand')) t = t.parentNode;
+      if (!t || t === root) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (UI.hasClass(t, 'ime-cand')) {
+        var cands = UI.toArray(candsEl.children);
+        for (var i = 0; i < cands.length; i++) if (cands[i] === t) { commitCand(i); return; }
+      } else {
+        press(t.getAttribute('data-k'));
+      }
+    }, true);
+    root.addEventListener('mousemove', function (e) {
+      if (!open) return;
+      var t = e.target;
+      while (t && t !== root && !UI.hasClass(t, 'ime-key') && !UI.hasClass(t, 'ime-cand')) t = t.parentNode;
+      if (!t || t === root) return;
+      if (UI.hasClass(t, 'ime-cand')) {
+        var cands = UI.toArray(candsEl.children);
+        for (var i = 0; i < cands.length; i++) if (cands[i] === t) { focusRow = -1; candIdx = i; render(); return; }
+      } else {
+        for (var r = 0; r < ROWS.length; r++) for (var c = 0; c < ROWS[r].length; c++) {
+          if (keyEl(r, c) === t) { if (focusRow !== r || focusCol !== c) { focusRow = r; focusCol = c; render(); } return; }
+        }
+      }
+    }, true);
+    /* clicks inside the overlay must not fall through to the page's Nav click handler */
+    root.addEventListener('click', function (e) { if (open) e.stopPropagation(); }, false);
+  }
+
   function openIme(opts) {
     cb = opts || {};
     if (!root) build();
+    bindPointer();
     text = opts && opts.value ? String(opts.value) : '';
     buf = '';
     if (opts && opts.english !== undefined) chinese = !opts.english;

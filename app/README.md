@@ -60,6 +60,14 @@ When the on-screen keyboard opens, the app registers a channel on the bridge (`P
 The phone page POSTs text to `/remote/<id>/send` (`action: input|submit`); the TV long-polls `/remote/<id>/poll`.
 Channels are in-memory, LAN-only, ids are random; needs `qrcode` on the bridge (in the Dockerfile).
 
+## Magic Remote (pointer)
+Handled centrally in `nav.js` so every view gets it: hovering a focusable item focuses it (switching zones as
+needed), clicking it is OK, the wheel steps down/up (rows, grid rows, chip rows, lists; across zones at the edges).
+Player: pointer motion shows the OSD, click on the video toggles play/pause, click on the progress bar seeks,
+wheel seeks ±10 s; the bar gets a fatter hit target while the pointer is in use (`body.pointer`). Keyboard overlay:
+keys and candidates are clickable and highlight on hover. `test/walk-pointer.js` drives all of this with real
+mouse events.
+
 ## Remote keys
 | Key | Home | Detail | Player | Keyboard | Login picker |
 |---|---|---|---|---|---|
