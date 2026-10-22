@@ -702,3 +702,21 @@ func TestBangumiAndHomeRows(t *testing.T) {
 		t.Fatalf("home rows: favs=%d bangumi=%d", len(home.Favorites), len(home.Bangumi))
 	}
 }
+
+func TestTimeEndpoint(t *testing.T) {
+	_, srv, _ := testApp(t)
+	_, _, b := get(t, srv.URL+"/time", nil)
+	var tm struct {
+		Epoch  int64  `json:"epoch_ms"`
+		Offset int    `json:"offset_min"`
+		TZ     string `json:"tz"`
+	}
+	decode(t, b, &tm)
+	if tm.Epoch < 1e12 || tm.TZ == "" {
+		t.Fatalf("time: %s", b)
+	}
+	_, want := time.Now().Zone()
+	if tm.Offset != want/60 {
+		t.Fatalf("offset %d want %d", tm.Offset, want/60)
+	}
+}

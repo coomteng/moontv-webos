@@ -198,6 +198,12 @@ func (a *App) handleGet(w http.ResponseWriter, r *http.Request, p string) {
 		a.serveSim(w, r)
 	case p == "/tv" || strings.HasPrefix(p, "/tv/"):
 		a.serveApp(w, r, strings.TrimPrefix(p, "/tv"))
+	case p == "/time":
+		// The TV's WebView may not honour the system time zone (reports UTC); the app paints its clock
+		// from this instead. TZ comes from the container env (TZ=Europe/Zurich etc.).
+		now := time.Now()
+		_, off := now.Zone()
+		sendJSON(w, r, 200, map[string]interface{}{"epoch_ms": now.UnixMilli(), "offset_min": off / 60, "tz": now.Location().String()}, 0)
 	case p == "/health":
 		sendJSON(w, r, 200, map[string]interface{}{"ok": true, "upstream": a.cfg.Upstream, "app": a.cfg.AppDir != "", "sim": a.cfg.SimFile != ""}, 0)
 	case strings.HasPrefix(p, "/r/"):

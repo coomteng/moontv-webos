@@ -112,6 +112,7 @@ var API = (function () {
     clearRecords: function () { return request('DELETE', '/record'); },
     removeRecord: function (key) { return request('DELETE', '/record' + qs({ key: key })); },
     bangumi: function () { return get('/bangumi'); },
+    time: function () { return get('/time', null, 10000); },
     /* --- accounts --- */
     login: function (username, password) { return request('POST', '/login', { username: username, password: password }, 20000, true); },
     logout: function () { var t = session; session = ''; return t ? request('POST', '/logout', { session: t }, 10000, true).then(null, function () {}) : Promise.resolve(); },

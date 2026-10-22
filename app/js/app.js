@@ -225,6 +225,10 @@ var App = (function () {
     buildTabs();
     UI.clock();
     setInterval(UI.clock, 15000);
+    /* clock zone from the bridge; refresh hourly in case of DST changes */
+    var syncClock = function () { API.time().then(function (t) { if (t) UI.setClockOffset(t.offset_min); }, function () {}); };
+    syncClock();
+    setInterval(syncClock, 60 * 60 * 1000);
     document.addEventListener('keydown', onKeyDown, false);
     /* Reduce scrolling/jumping from the TV browser default handlers. */
     window.addEventListener('scroll', function () { window.scrollTo(0, 0); }, false);

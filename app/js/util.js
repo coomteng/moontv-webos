@@ -89,9 +89,21 @@ var UI = (function () {
     toastTimer = setTimeout(function () { removeClass(t, 'show'); }, ms || 3500);
   }
 
+  /* The TV's WebView may report UTC regardless of the TV's time-zone setting, so the clock uses the
+   * bridge's zone offset (from /time) applied to UTC; until that arrives it falls back to local time. */
+  var tzOffsetMin = null;   /* minutes east of UTC, from the bridge */
+  function setClockOffset(min) { tzOffsetMin = (typeof min === 'number') ? min : null; clock(); }
   function clock() {
     var d = new Date();
-    $('clock').textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    var h, m;
+    if (tzOffsetMin !== null) {
+      var t = d.getTime() + tzOffsetMin * 60000;
+      var u = new Date(t);
+      h = u.getUTCHours(); m = u.getUTCMinutes();
+    } else {
+      h = d.getHours(); m = d.getMinutes();
+    }
+    $('clock').textContent = pad2(h) + ':' + pad2(m);
   }
 
   return {
@@ -99,6 +111,6 @@ var UI = (function () {
     hasClass: hasClass, addClass: addClass, removeClass: removeClass, toggleClass: toggleClass,
     translate: translate, getTx: getTx, getTy: getTy, relRect: relRect,
     fmtTime: fmtTime, pad2: pad2, cleanText: cleanText,
-    loading: loading, toast: toast, clock: clock
+    loading: loading, toast: toast, clock: clock, setClockOffset: setClockOffset
   };
 })();

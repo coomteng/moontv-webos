@@ -13,6 +13,7 @@ COPY --from=build /moontv-api /usr/local/bin/moontv-api
 COPY app /app/tv
 COPY sim /app/sim
 ENV MOONTV_UPSTREAM=http://moontv-core:3000 \
+    TZ=UTC \
     MOONTV_CACHE=/cache \
     MOONTV_PORT=8788 \
     MOONTV_APP_DIR=/app/tv \

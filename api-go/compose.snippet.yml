@@ -13,6 +13,7 @@
       - '8788:8788'
     environment:
       - MOONTV_UPSTREAM=http://moontv-core:3000
+      - TZ=Europe/Zurich               # the TV shows this zone's time (old webOS WebViews ignore the TV's own zone)
       - MOONTV_USER=${MOONTV_USER}      # MoonTV login used by the bridge
       - MOONTV_PASS=${MOONTV_PASS}
       # optional: accounts pre-loaded onto every TV on its first start ("user:pass,user2:pass2")
