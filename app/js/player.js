@@ -5,10 +5,13 @@
   var OSD_TIMEOUT = 4000;
   var SAVE_INTERVAL = 10000;
   var SEEK_STEP = 10;
-  /* webOS native HLS buffer depth (seconds). Passed to the platform pipeline through the
-   * `mediaOption` JSON in the <source type> attribute (LG mediaOption mechanism; bufferControl keys
-   * from webosose/g-media-pipeline PlayerTypes.h). preBufferTime < 3 falls back to the default. */
-  var BUFFER = { pre: 4, min: 4, max: 60 };
+  /* webOS native HLS buffer depth (seconds) via the `mediaOption` JSON in the <source type> attribute
+   * (LG mediaOption mechanism; bufferControl keys from webosose/g-media-pipeline PlayerTypes.h;
+   * preBufferTime < 3 falls back to the default). null = platform default (plain <video src>).
+   * 2.8.0 shipped { pre: 4, min: 4, max: 60 }: steady-state buffer-ahead ~28 s on a webOS 5 projector,
+   * but +10 s seeks felt slower on slow sources (resume waits for bufferingMinTime; the connection is
+   * never idle), and an A/B could not show a benefit — so it is off until measured properly. */
+  var BUFFER = null;
   var HLS_MIME = 'application/vnd.apple.mpegurl';
 
   var video = null;
@@ -248,7 +251,7 @@
     if (window.HLS_SHIM && window.HLS_SHIM.attach) {
       window.HLS_SHIM.attach(video, result.episodes[i]);
     } else {
-      attachNative(result.episodes[i], false);
+      attachNative(result.episodes[i], !BUFFER);
     }
     startPlay();
     if (osdFocus) { Nav.focusZone(0, index); }

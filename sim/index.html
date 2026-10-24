@@ -145,7 +145,7 @@
       var inst = null;
       w.HLS_SHIM = { attach: function (video, url) {
         if (inst) { try { inst.destroy(); } catch (e) {} inst = null; }
-        if (w.Hls && w.Hls.isSupported()) { inst = new w.Hls({ enableWorker: true, maxBufferLength: 60, maxMaxBufferLength: 120 }); inst.loadSource(url); inst.attachMedia(video); }
+        if (w.Hls && w.Hls.isSupported()) { inst = new w.Hls({ enableWorker: true }); inst.loadSource(url); inst.attachMedia(video); }
         else { video.src = url; }
       } };
       log('hls.js shim installed (desktop playback)');
