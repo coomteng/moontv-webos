@@ -5,6 +5,11 @@
   var OSD_TIMEOUT = 4000;
   var SAVE_INTERVAL = 10000;
   var SEEK_STEP = 10;
+  /* webOS native HLS buffer depth (seconds). Passed to the platform pipeline through the
+   * `mediaOption` JSON in the <source type> attribute (LG mediaOption mechanism; bufferControl keys
+   * from webosose/g-media-pipeline PlayerTypes.h). preBufferTime < 3 falls back to the default. */
+  var BUFFER = { pre: 4, min: 4, max: 60 };
+  var HLS_MIME = 'application/vnd.apple.mpegurl';
 
   var video = null;
   var result = null;       /* current Result */
@@ -23,6 +28,7 @@
   var introDone = false;   /* intro seek applied for the current episode */
   var outroDone = false;   /* outro auto-next fired for the current episode */
   var skipSaving = false;
+  var plainFallback = false; /* true once the current episode was retried without mediaOption */
 
   function $(id) { return UI.$(id); }
 
@@ -238,18 +244,58 @@
     setState('加载中…');
     /* On the TV: native HLS via <video src>. In the desktop simulator, window.HLS_SHIM (hls.js
      * adapter injected by sim/index.html) attaches MSE playback instead. */
+    plainFallback = false;
     if (window.HLS_SHIM && window.HLS_SHIM.attach) {
       window.HLS_SHIM.attach(video, result.episodes[i]);
     } else {
-      video.src = result.episodes[i];
-      try { video.load(); } catch (e) { /* ignore */ }
+      attachNative(result.episodes[i], false);
     }
-    var p = null;
-    try { p = video.play(); } catch (e2) { /* ignore */ }
-    if (p && p.then) p.then(null, function () { /* autoplay may be rejected headless; ignore */ });
+    startPlay();
     if (osdFocus) { Nav.focusZone(0, index); }
     showOsd(false);
     updateTime();
+  }
+
+  function startPlay() {
+    var p = null;
+    try { p = video.play(); } catch (e) { /* ignore */ }
+    if (p && p.then) p.then(null, function () { /* autoplay may be rejected headless; ignore */ });
+  }
+
+  function clearSources() {
+    var s;
+    while ((s = video.querySelector('source'))) video.removeChild(s);
+    video.removeAttribute('src');
+  }
+
+  /* Native playback. plain=false: <source> with mediaOption (deeper buffer); plain=true: bare src. */
+  function attachNative(url, plain) {
+    clearSources();
+    if (plain) {
+      video.src = url;
+    } else {
+      var opt = { mediaTransportType: 'HLS', option: { bufferControl: {
+        userBufferCtrl: true, preBufferTime: BUFFER.pre,
+        bufferingMinTime: BUFFER.min, bufferingMaxTime: BUFFER.max } } };
+      var src = document.createElement('source');
+      src.setAttribute('src', url);
+      src.setAttribute('type', HLS_MIME + ';mediaOption=' + encodeURIComponent(JSON.stringify(opt)));
+      /* An unsupported type / failed fetch of a <source> child fires `error` on the <source>, not
+       * on the <video> (video.error stays null), so listen here too. */
+      src.addEventListener('error', function () { if (active) retryPlain(); }, false);
+      video.appendChild(src);
+    }
+    try { video.load(); } catch (e) { /* ignore */ }
+  }
+
+  /* The mediaOption source was refused: retry once the old way (plain src, default buffer). */
+  function retryPlain() {
+    if (plainFallback || window.HLS_SHIM) return false;
+    plainFallback = true;
+    if (video.currentTime > 3) pendingSeek = video.currentTime; /* mid-stream failure: resume where we were */
+    attachNative(result.episodes[index], true);
+    startPlay();
+    return true;
   }
 
   /* ---- Magic Remote: pointer on the player ----
@@ -342,6 +388,7 @@
     video.addEventListener('error', function () {
       if (!active) return;
       var code = video.error && video.error.code;
+      if (video.querySelector('source') && retryPlain()) return;
       setState('播放失败（' + (result.source_name || result.source) + '，错误 ' + (code || '?') + '）\n按返回键退出，可在详情页换源');
       showOsd(true);
       stopSaveTimer();
@@ -415,7 +462,7 @@
       if (video) {
         if (video.currentTime > 3) saveRecord(true);
         try { video.pause(); } catch (e) { /* ignore */ }
-        video.removeAttribute('src');
+        clearSources();
         try { video.load(); } catch (e2) { /* ignore */ }
       }
       setState('');

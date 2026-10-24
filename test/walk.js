@@ -140,7 +140,7 @@ async function waitFor(page, fn, timeout = 30000) {
   await key(page, 'Enter');
   await sleep(1500);
   await step(page, '10-player', { view: 'player', noFocus: true });
-  const src = await page.evaluate(() => document.getElementById('video').getAttribute('src') || document.getElementById('video').src);
+  const src = await page.evaluate(() => { const v = document.getElementById('video'); const s = v.querySelector('source'); return (s && s.getAttribute('src')) || v.getAttribute('src') || v.src; });
   assert(/m3u8/.test(src), 'video src is an m3u8 (' + src + ')');
   await key(page, 'ArrowRight');
   await sleep(200);
